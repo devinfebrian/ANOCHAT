@@ -43,7 +43,7 @@ export default async function EventsPage() {
                     <p className="truncate text-base font-medium text-zinc-900 dark:text-zinc-50">
                       {event.title}
                     </p>
-                    <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
+                    <p className="mt-0.5 break-words text-sm text-zinc-600 dark:text-zinc-400">
                       <EventTime date={event.startsAt} /> · {event.locationText}
                     </p>
                   </div>

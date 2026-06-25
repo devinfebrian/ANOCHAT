@@ -41,7 +41,7 @@ function RsvpButton({ status, current }: { status: RsvpStatus; current: RsvpStat
       value={status}
       disabled={pending}
       aria-pressed={active}
-      className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${STATUS_STYLES[status]} ${active ? "ring-2 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950 ring-current" : ""}`}
+      className={`flex-1 rounded-md border px-3 py-2.5 text-sm font-medium transition-colors disabled:opacity-60 md:flex-none md:py-1.5 ${STATUS_STYLES[status]} ${active ? "ring-2 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950 ring-current" : ""}`}
     >
       {STATUS_LABELS[status]}
     </button>
@@ -75,7 +75,11 @@ export function RsvpControl({ identifier, currentStatus, currentNote, counts }: 
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {state.formError ? (
+          <p className="text-xs text-red-600 dark:text-red-400">{state.formError}</p>
+        ) : null}
+
+        <div className="sticky bottom-0 z-10 -mx-4 flex items-center gap-2 border-t border-zinc-200 bg-white/90 px-4 py-3 pb-[env(safe-area-inset-bottom)] backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none dark:border-zinc-800 dark:bg-zinc-950/90">
           {RSVP_STATUSES.map((status) => (
             <RsvpButton key={status} status={status} current={currentStatus} />
           ))}
@@ -85,10 +89,6 @@ export function RsvpControl({ identifier, currentStatus, currentNote, counts }: 
       <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
         {counts.joining} joining · {counts.interested} interested · {counts.declined} can&apos;t make it
       </p>
-
-      {state.formError ? (
-        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{state.formError}</p>
-      ) : null}
     </div>
   );
 }

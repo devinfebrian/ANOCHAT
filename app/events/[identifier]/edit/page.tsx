@@ -33,7 +33,7 @@ export default async function EditEventPage({ params }: Props) {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-10">
+    <div className="mx-auto w-full max-w-2xl px-4 py-10 pb-24 md:pb-10">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
         Edit event
       </h1>
