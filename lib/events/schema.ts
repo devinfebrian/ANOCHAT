@@ -8,6 +8,7 @@ const MAX_LOCATION = 200;
 const MAX_DESCRIPTION = 1000;
 const MIN_PARTICIPANTS = 2;
 const MAX_PARTICIPANTS = 100;
+const MAX_RSVP_NOTE = 120;
 
 const GOOGLE_MAPS_RE = /^https?:\/\/(maps\.app\.goo\.gl\/[\w./?=&-]+|[a-z0-9-]+\.google\.com\/maps\/[\w./?=&%-]*)$/i;
 
@@ -70,6 +71,14 @@ export type EventFormValues = z.infer<typeof eventFormSchema>;
 export const rsvpStatusSchema = z.enum(RSVP_STATUSES);
 export type RsvpStatusValues = z.infer<typeof rsvpStatusSchema>;
 
+export const rsvpNoteSchema = z
+  .string()
+  .trim()
+  .max(MAX_RSVP_NOTE, `Note must be at most ${MAX_RSVP_NOTE} characters`)
+  .optional()
+  .or(z.literal(""));
+export type RsvpNoteValues = z.infer<typeof rsvpNoteSchema>;
+
 export const EVENT_FORM_LIMITS = {
   MIN_TITLE,
   MAX_TITLE,
@@ -77,6 +86,10 @@ export const EVENT_FORM_LIMITS = {
   MAX_DESCRIPTION,
   MIN_PARTICIPANTS,
   MAX_PARTICIPANTS,
+} as const;
+
+export const RSVP_LIMITS = {
+  MAX_RSVP_NOTE,
 } as const;
 
 export function eventFormValuesFromFormData(formData: FormData) {

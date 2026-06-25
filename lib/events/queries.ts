@@ -89,12 +89,15 @@ export async function getRsvpCounts(eventId: string): Promise<RsvpCounts> {
   return counts;
 }
 
-export async function getUserRsvp(eventId: string, username: string): Promise<RsvpStatus | null> {
+export async function getUserRsvp(
+  eventId: string,
+  username: string,
+): Promise<{ status: RsvpStatus; note: string | null } | null> {
   await connection();
   const rows = await db
-    .select({ status: eventAttendees.status })
+    .select({ status: eventAttendees.status, note: eventAttendees.note })
     .from(eventAttendees)
     .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.username, username)))
     .limit(1);
-  return rows[0]?.status ?? null;
+  return rows[0] ?? null;
 }

@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { eventAttendees } from "@/lib/db/schema";
-import { rsvpStatusSchema } from "@/lib/events/schema";
+import { rsvpNoteSchema, rsvpStatusSchema } from "@/lib/events/schema";
 import { getEventByIdentifier } from "@/lib/events/queries";
 import { getServerUsername } from "@/lib/profile/server";
 
 export type SetRsvpState = {
   ok: boolean;
   formError?: string;
+  noteError?: string;
 };
 
 export async function setRsvp(
@@ -28,6 +29,12 @@ export async function setRsvp(
   }
   const status = statusParsed.data;
 
+  const noteParsed = rsvpNoteSchema.safeParse(String(formData.get("note") ?? ""));
+  if (!noteParsed.success) {
+    return { ok: false, noteError: noteParsed.error.issues[0]?.message };
+  }
+  const note = noteParsed.data && noteParsed.data.trim() ? noteParsed.data.trim() : null;
+
   const event = await getEventByIdentifier(identifier);
   if (!event) {
     return { ok: false, formError: "Event not found." };
@@ -36,10 +43,10 @@ export async function setRsvp(
   try {
     await db
       .insert(eventAttendees)
-      .values({ eventId: event.id, username, status })
+      .values({ eventId: event.id, username, status, note })
       .onConflictDoUpdate({
         target: [eventAttendees.eventId, eventAttendees.username],
-        set: { status, joinedAt: new Date() },
+        set: { status, joinedAt: new Date(), note },
       });
   } catch (error) {
     const code =
