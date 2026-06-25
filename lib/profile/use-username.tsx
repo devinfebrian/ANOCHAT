@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { syncUsernameCookie } from "./sync-action";
 import { usernameSchema, type Username } from "./schema";
 import {
   clearUsername as clearStored,
@@ -59,12 +60,14 @@ export function UsernameProvider({ children }: { children: ReactNode }) {
       throw new Error(message);
     }
     saveStored(parsed.data);
+    void syncUsernameCookie(parsed.data);
     emit();
     return parsed.data;
   }, []);
 
   const clear = useCallback(() => {
     clearStored();
+    void syncUsernameCookie(null);
     emit();
   }, []);
 
