@@ -89,7 +89,7 @@ export async function createEvent(
         .returning({ id: events.id, slug: events.slug });
       await tx
         .insert(eventAttendees)
-        .values({ eventId: event.id, username: createdBy });
+        .values({ eventId: event.id, username: createdBy, status: "joining" });
       return event;
     });
 

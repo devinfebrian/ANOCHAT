@@ -3,8 +3,17 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { EventTime } from "@/components/events/event-time";
 import { CopyLinkButton } from "@/components/events/copy-link-button";
+import { RsvpControl } from "@/components/events/rsvp-control";
+import { RequireUsername } from "@/components/events/require-username";
 import { Avatar } from "@/components/profile/avatar";
-import { getEventByIdentifier, listEventAttendees } from "@/lib/events/queries";
+import {
+  getEventByIdentifier,
+  getRsvpCounts,
+  getUserRsvp,
+  listEventAttendees,
+} from "@/lib/events/queries";
+import { getServerUsername } from "@/lib/profile/server";
+import type { RsvpStatus } from "@/lib/db/schema";
 
 type Props = { params: Promise<{ identifier: string }> };
 
@@ -15,11 +24,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `${event.title} · ANOCHAT`, description: event.description ?? undefined };
 }
 
+const STATUS_GROUPS: { status: RsvpStatus; label: string }[] = [
+  { status: "joining", label: "Joining" },
+  { status: "interested", label: "Interested" },
+  { status: "declined", label: "Can't make it" },
+];
+
 export default async function EventDetailPage({ params }: Props) {
   const { identifier } = await params;
   const event = await getEventByIdentifier(identifier);
   if (!event) notFound();
-  const attendees = await listEventAttendees(event.id);
+
+  const [attendees, counts, username] = await Promise.all([
+    listEventAttendees(event.id),
+    getRsvpCounts(event.id),
+    getServerUsername(),
+  ]);
+  const currentStatus = username ? await getUserRsvp(event.id, username) : null;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -69,34 +90,46 @@ export default async function EventDetailPage({ params }: Props) {
         <span className="font-medium text-zinc-900 dark:text-zinc-50">{event.createdBy}</span>
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-4">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          {event.attendeesCount} / {event.maxParticipants} attending
-        </p>
+      <div className="mt-6 flex items-center justify-end gap-4">
         <CopyLinkButton />
       </div>
 
-      <div className="mt-6">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          Attendees
-        </h2>
+      <RequireUsername>
+        <RsvpControl
+          identifier={event.slug}
+          currentStatus={currentStatus}
+          counts={counts}
+        />
+      </RequireUsername>
+
+      <div className="mt-6 space-y-6">
+        {STATUS_GROUPS.map(({ status, label }) => {
+          const group = attendees.filter((a) => a.status === status);
+          if (group.length === 0) return null;
+          return (
+            <div key={status}>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                {label} <span className="font-normal">· {group.length}</span>
+              </h2>
+              <ul className="mt-3 space-y-2">
+                {group.map((a) => (
+                  <li key={`${a.eventId}-${a.username}`} className="flex items-center gap-3 text-sm">
+                    <Avatar username={a.username} size={28} />
+                    <span className="font-medium text-zinc-900 dark:text-zinc-50">{a.username}</span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      RSVPed <EventTime date={a.joinedAt} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
         {attendees.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-            No attendees yet.
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            No responses yet.
           </p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {attendees.map((a) => (
-              <li key={`${a.eventId}-${a.username}`} className="flex items-center gap-3 text-sm">
-                <Avatar username={a.username} size={28} />
-                <span className="font-medium text-zinc-900 dark:text-zinc-50">{a.username}</span>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  joined <EventTime date={a.joinedAt} />
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        ) : null}
       </div>
     </div>
   );
