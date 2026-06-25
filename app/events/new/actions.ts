@@ -86,7 +86,7 @@ export async function createEvent(
           description: description || null,
           createdBy,
         })
-        .returning({ id: events.id });
+        .returning({ id: events.id, slug: events.slug });
       await tx
         .insert(eventAttendees)
         .values({ eventId: event.id, username: createdBy });
@@ -94,7 +94,7 @@ export async function createEvent(
     });
 
     revalidatePath("/events");
-    redirect(`/events/${inserted.id}`);
+    redirect(`/events/${inserted.slug}`);
   } catch (error) {
     if (error instanceof Error && (error as { code?: string }).code === "45000") {
       return { ok: false, formError: "Event is full." };

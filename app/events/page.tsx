@@ -35,7 +35,7 @@ export default async function EventsPage() {
           {items.map((event) => (
             <li key={event.id}>
               <Link
-                href={`/events/${event.id}`}
+                href={`/events/${event.slug}`}
                 className="block rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
               >
                 <div className="flex items-start justify-between gap-4">

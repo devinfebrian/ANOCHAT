@@ -1,4 +1,5 @@
 import { asc, eq, gt, sql } from "drizzle-orm";
+import { cache } from "react";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { eventAttendees, events, type Event, type EventAttendee } from "@/lib/db/schema";
@@ -8,8 +9,9 @@ export type EventDetail = Event & { attendeesCount: number };
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-export async function getEventByIdentifier(identifier: string): Promise<EventDetail | null> {
-  if (!UUID_RE.test(identifier)) return null;
+export const getEventByIdentifier = cache(async function getEventByIdentifier(
+  identifier: string,
+): Promise<EventDetail | null> {
   await connection();
   const rows = await db
     .select({
@@ -29,10 +31,10 @@ export async function getEventByIdentifier(identifier: string): Promise<EventDet
       )`.as("attendees_count"),
     })
     .from(events)
-    .where(eq(events.id, identifier))
+    .where(eq(UUID_RE.test(identifier) ? events.id : events.slug, identifier))
     .limit(1);
   return rows[0] ?? null;
-}
+});
 
 export async function listEventAttendees(eventId: string): Promise<EventAttendee[]> {
   await connection();

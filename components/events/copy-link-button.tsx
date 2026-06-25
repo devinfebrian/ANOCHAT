@@ -3,12 +3,14 @@
 import { useState } from "react";
 
 export function CopyLinkButton() {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
 
   async function handleCopy() {
     const url = typeof window !== "undefined" ? window.location.href : "";
+    let ok = false;
     try {
       await navigator.clipboard.writeText(url);
+      ok = true;
     } catch {
       const ta = document.createElement("textarea");
       ta.value = url;
@@ -18,15 +20,17 @@ export function CopyLinkButton() {
       document.body.appendChild(ta);
       ta.select();
       try {
-        document.execCommand("copy");
+        ok = document.execCommand("copy");
       } catch {
-        // ignore
+        ok = false;
       }
       document.body.removeChild(ta);
     }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    setStatus(ok ? "copied" : "error");
+    window.setTimeout(() => setStatus("idle"), 2000);
   }
+
+  const label = status === "copied" ? "Copied!" : status === "error" ? "Couldn't copy" : "Copy link";
 
   return (
     <button
@@ -34,7 +38,7 @@ export function CopyLinkButton() {
       onClick={handleCopy}
       className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:border-zinc-300"
     >
-      {copied ? "Copied!" : "Copy link"}
+      {label}
     </button>
   );
 }
