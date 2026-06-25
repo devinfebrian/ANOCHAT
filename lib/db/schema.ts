@@ -44,6 +44,7 @@ export const eventAttendees = pgTable(
       .references(() => events.id, { onDelete: "cascade" }),
     username: text("username").notNull(),
     status: text("status").notNull().$type<RsvpStatus>(),
+    note: text("note"),
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -52,6 +53,7 @@ export const eventAttendees = pgTable(
     primaryKey({ columns: [t.eventId, t.username] }),
     index("event_attendees_username_idx").on(t.username),
     check("event_attendees_status_valid", sql`${t.status} IN ('joining','interested','declined')`),
+    check("event_attendees_note_length", sql`char_length(coalesce(${t.note}, '')) <= 120`),
   ],
 );
 

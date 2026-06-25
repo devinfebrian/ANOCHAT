@@ -1,13 +1,16 @@
 "use client";
 
+import { useId } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { RSVP_STATUSES, type RsvpStatus } from "@/lib/db/schema";
+import { RSVP_LIMITS } from "@/lib/events/schema";
 import { setRsvp, type SetRsvpState } from "@/app/events/[identifier]/actions";
 
 type RsvpControlProps = {
   identifier: string;
   currentStatus: RsvpStatus | null;
+  currentNote: string | null;
   counts: { joining: number; interested: number; declined: number };
 };
 
@@ -45,19 +48,39 @@ function RsvpButton({ status, current }: { status: RsvpStatus; current: RsvpStat
   );
 }
 
-export function RsvpControl({ identifier, currentStatus, counts }: RsvpControlProps) {
+export function RsvpControl({ identifier, currentStatus, currentNote, counts }: RsvpControlProps) {
   const [state, formAction] = useActionState(setRsvp, initialState);
+  const noteId = useId();
 
   return (
     <div className="mt-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <form action={formAction} className="contents">
-          <input type="hidden" name="identifier" value={identifier} />
+      <form action={formAction} className="space-y-3">
+        <input type="hidden" name="identifier" value={identifier} />
+
+        <div>
+          <label htmlFor={noteId} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Note <span className="text-zinc-400">(optional)</span>
+          </label>
+          <textarea
+            id={noteId}
+            name="note"
+            rows={2}
+            maxLength={RSVP_LIMITS.MAX_RSVP_NOTE}
+            defaultValue={currentNote ?? ""}
+            placeholder="e.g. Arriving 15 min late"
+            className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
+          />
+          {state.noteError ? (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{state.noteError}</p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
           {RSVP_STATUSES.map((status) => (
             <RsvpButton key={status} status={status} current={currentStatus} />
           ))}
-        </form>
-      </div>
+        </div>
+      </form>
 
       <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
         {counts.joining} joining · {counts.interested} interested · {counts.declined} can&apos;t make it

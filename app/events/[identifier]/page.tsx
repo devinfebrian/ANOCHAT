@@ -40,7 +40,9 @@ export default async function EventDetailPage({ params }: Props) {
     getRsvpCounts(event.id),
     getServerUsername(),
   ]);
-  const currentStatus = username ? await getUserRsvp(event.id, username) : null;
+  const currentRsvp = username ? await getUserRsvp(event.id, username) : null;
+  const currentStatus = currentRsvp?.status ?? null;
+  const currentNote = currentRsvp?.note ?? null;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -98,6 +100,7 @@ export default async function EventDetailPage({ params }: Props) {
         <RsvpControl
           identifier={event.slug}
           currentStatus={currentStatus}
+          currentNote={currentNote}
           counts={counts}
         />
       </RequireUsername>
@@ -115,10 +118,22 @@ export default async function EventDetailPage({ params }: Props) {
                 {group.map((a) => (
                   <li key={`${a.eventId}-${a.username}`} className="flex items-center gap-3 text-sm">
                     <Avatar username={a.username} size={28} />
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">{a.username}</span>
-                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                      RSVPed <EventTime date={a.joinedAt} />
-                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-50">{a.username}</span>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                          RSVPed <EventTime date={a.joinedAt} />
+                        </span>
+                      </div>
+                      {a.note ? (
+                        <p
+                          className="mt-0.5 truncate text-xs text-zinc-600 dark:text-zinc-400"
+                          title={a.note}
+                        >
+                          {a.note}
+                        </p>
+                      ) : null}
+                    </div>
                   </li>
                 ))}
               </ul>
