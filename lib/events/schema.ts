@@ -9,7 +9,7 @@ const MAX_DESCRIPTION = 1000;
 const MIN_PARTICIPANTS = 2;
 const MAX_PARTICIPANTS = 100;
 const MAX_RSVP_NOTE = 120;
-
+const MAX_MAP_URL = 500;
 const GOOGLE_MAPS_RE = /^https?:\/\/(maps\.app\.goo\.gl\/[\w./?=&-]+|[a-z0-9-]+\.google\.com\/maps\/[\w./?=&%-]*)$/i;
 
 export const eventFormSchema = z.object({
@@ -45,6 +45,7 @@ export const eventFormSchema = z.object({
   mapUrl: z
     .string()
     .trim()
+    .max(MAX_MAP_URL, `Map link must be at most ${MAX_MAP_URL} characters`)
     .optional()
     .or(z.literal(""))
     .refine(
@@ -87,6 +88,7 @@ export const EVENT_FORM_LIMITS = {
   MIN_TITLE,
   MAX_TITLE,
   MAX_LOCATION,
+  MAX_MAP_URL,
   MAX_DESCRIPTION,
   MIN_PARTICIPANTS,
   MAX_PARTICIPANTS,

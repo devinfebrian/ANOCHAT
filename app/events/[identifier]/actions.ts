@@ -3,13 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { eq, isNull, and } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { eventAttendees, events } from "@/lib/db/schema";
+import { eventAttendees, events, reports } from "@/lib/db/schema";
 import {
   editEventSchema,
   eventFormValuesFromFormData,
   rsvpNoteSchema,
   rsvpStatusSchema,
 } from "@/lib/events/schema";
+import { reportSchema } from "@/lib/reports/schema";
+import { checkReportRateLimit } from "@/lib/reports/rate-limit";
 import { zonedTimeToUtc } from "@/lib/events/time";
 import { getEventByIdentifier } from "@/lib/events/queries";
 import { clearManagerCookie, verifyEventManager } from "@/lib/events/management";
@@ -185,5 +187,80 @@ export async function cancelEvent(
   revalidatePath("/events");
   revalidatePath(`/events/${event.slug}`);
   revalidatePath(`/events/${event.slug}/edit`);
+  return { ok: true };
+}
+
+export type ReportEventState = {
+  ok: boolean;
+  formError?: string;
+  reasonError?: string;
+};
+
+export async function reportEvent(
+  _prev: ReportEventState,
+  formData: FormData,
+): Promise<ReportEventState> {
+  const username = await getServerUsername();
+  if (!username) {
+    return { ok: false, formError: "Set a username before reporting." };
+  }
+
+  const identifier = String(formData.get("identifier") ?? "");
+  if (!identifier) {
+    return { ok: false, formError: "Event not found." };
+  }
+
+  const event = await getEventByIdentifier(identifier);
+  if (!event) {
+    return { ok: false, formError: "Event not found." };
+  }
+
+  if (username === event.createdBy) {
+    return { ok: false, formError: "You can't report your own event." };
+  }
+  if (event.cancelledAt) {
+    return { ok: false, formError: "This event has been cancelled." };
+  }
+
+  const allowed = await checkReportRateLimit(username, "event");
+  if (!allowed) {
+    return {
+      ok: false,
+      formError: "Too many reports submitted. Try again in a few minutes.",
+    };
+  }
+
+  const parsed = reportSchema.safeParse({
+    targetType: "event",
+    targetId: event.id,
+    reporterUsername: username,
+    reason: String(formData.get("reason") ?? ""),
+  });
+  if (!parsed.success) {
+    const reasonIssue = parsed.error.issues.find((i) => i.path[0] === "reason");
+    return {
+      ok: false,
+      reasonError: reasonIssue?.message,
+      formError: reasonIssue ? undefined : parsed.error.issues[0]?.message,
+    };
+  }
+
+  try {
+    await db.insert(reports).values({
+      targetType: parsed.data.targetType,
+      targetId: parsed.data.targetId,
+      reporterUsername: parsed.data.reporterUsername,
+      reason: parsed.data.reason,
+    });
+  } catch (error) {
+    const code =
+      (error as { code?: string })?.code ??
+      (error as { cause?: { code?: string } })?.cause?.code;
+    if (code === "23505") {
+      return { ok: false, formError: "You've already reported this event." };
+    }
+    throw error;
+  }
+
   return { ok: true };
 }

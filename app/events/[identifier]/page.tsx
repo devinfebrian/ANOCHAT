@@ -6,6 +6,7 @@ import { EventTime } from "@/components/events/event-time";
 import { CopyLinkButton } from "@/components/events/copy-link-button";
 import { RsvpControl } from "@/components/events/rsvp-control";
 import { CancelEventButton } from "@/components/events/cancel-event-button";
+import { ReportEventButton } from "@/components/events/report-event-button";
 import { RequireUsername } from "@/components/events/require-username";
 import { Avatar } from "@/components/profile/avatar";
 import {
@@ -227,6 +228,12 @@ export default async function EventDetailPage({ params }: Props) {
           );
         })}
       </div>
+
+      {username && username !== event.createdBy ? (
+        <div className="mt-8 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+          <ReportEventButton identifier={event.slug} />
+        </div>
+      ) : null}
     </div>
   );
 }
