@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { EventTime } from "@/components/events/event-time";
 import { CopyLinkButton } from "@/components/events/copy-link-button";
@@ -23,7 +24,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { identifier } = await params;
   const event = await getEventByIdentifier(identifier);
   if (!event) return { title: "Event not found · ANOCHAT" };
-  return { title: `${event.title} · ANOCHAT`, description: event.description ?? undefined };
+  const title = `${event.title} · ANOCHAT`;
+  const description = event.description ?? undefined;
+  const h = await headers();
+  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0].trim();
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "localhost").split(",")[0].trim();
+  const url = `${proto}://${host}/events/${event.slug}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: `/events/${event.slug}` },
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "website",
+      siteName: "ANOCHAT",
+    },
+    twitter: { card: "summary" },
+  };
 }
 
 const STATUS_GROUPS: { status: RsvpStatus; label: string }[] = [
@@ -49,7 +68,7 @@ export default async function EventDetailPage({ params }: Props) {
   const cancelled = Boolean(event.cancelledAt);
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-10">
+    <div className="mx-auto w-full max-w-2xl px-4 py-10 pb-24 md:pb-10">
       <Link
         href="/events"
         className="text-sm text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
@@ -59,10 +78,10 @@ export default async function EventDetailPage({ params }: Props) {
 
       <div className="mt-4 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="break-words text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             {event.title}
           </h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-1 break-words text-sm text-zinc-600 dark:text-zinc-400">
             <EventTime date={event.startsAt} /> · {event.locationText}
           </p>
         </div>
@@ -78,32 +97,10 @@ export default async function EventDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {event.mapUrl ? (
-        <p className="mt-3 text-sm">
-          <a
-            href={event.mapUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-zinc-900 underline underline-offset-2 hover:text-zinc-600 dark:text-zinc-50 dark:hover:text-zinc-300"
-          >
-            View map
-          </a>
-        </p>
-      ) : null}
-
-      {event.description ? (
-        <p className="mt-4 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
-          {event.description}
-        </p>
-      ) : null}
-
-      <div className="mt-6 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-        <span className="text-zinc-500 dark:text-zinc-400">Hosted by</span>
-        <Avatar username={event.createdBy} size={24} />
-        <span className="font-medium text-zinc-900 dark:text-zinc-50">{event.createdBy}</span>
-      </div>
-
-      <div className="mt-6 flex items-center justify-end gap-4">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <span className="rounded-full border border-zinc-200 px-3 py-1 text-sm font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
+          {counts.joining} joining · {event.maxParticipants} spots
+        </span>
         <CopyLinkButton />
         {isManager && !cancelled ? (
           <>
@@ -116,6 +113,31 @@ export default async function EventDetailPage({ params }: Props) {
             <CancelEventButton identifier={event.slug} />
           </>
         ) : null}
+      </div>
+
+      {event.mapUrl ? (
+        <p className="mt-3 break-all text-sm">
+          <a
+            href={event.mapUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-zinc-900 underline underline-offset-2 hover:text-zinc-600 dark:text-zinc-50 dark:hover:text-zinc-300"
+          >
+            View map
+          </a>
+        </p>
+      ) : null}
+
+      {event.description ? (
+        <p className="mt-4 break-words whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300">
+          {event.description}
+        </p>
+      ) : null}
+
+      <div className="mt-6 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+        <span className="text-zinc-500 dark:text-zinc-400">Hosted by</span>
+        <Avatar username={event.createdBy} size={24} />
+        <span className="font-medium text-zinc-900 dark:text-zinc-50">{event.createdBy}</span>
       </div>
 
       {cancelled ? (
@@ -132,15 +154,6 @@ export default async function EventDetailPage({ params }: Props) {
           />
         </RequireUsername>
       )}
-
-      <div className="mt-6 flex items-baseline gap-2">
-        <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          {counts.joining} joining
-        </span>
-        <span className="text-sm text-zinc-500 dark:text-zinc-400">
-          / {event.maxParticipants} spots
-        </span>
-      </div>
 
       <div className="mt-3 space-y-6">
         {STATUS_GROUPS.map(({ status, label }) => {

@@ -41,7 +41,7 @@ function SubmitButton({ mode }: { mode: Mode }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      className="w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 md:w-auto md:py-2 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
     >
       {pending
         ? mode === "edit"
@@ -183,11 +183,12 @@ export function EventForm({ mode = "create", identifier, initial }: EventFormPro
           id="maxParticipants"
           name="maxParticipants"
           type="number"
+          inputMode="numeric"
           required
           min={EVENT_FORM_LIMITS.MIN_PARTICIPANTS}
           max={EVENT_FORM_LIMITS.MAX_PARTICIPANTS}
           defaultValue={initial?.maxParticipants ?? 4}
-          className="mt-1 w-32 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
+          className="mt-1 w-32 rounded-md border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
         />
         <FieldError errors={fieldErrors.maxParticipants} />
       </div>
@@ -214,7 +215,7 @@ export function EventForm({ mode = "create", identifier, initial }: EventFormPro
         </p>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-zinc-200 bg-white/90 px-4 py-3 pb-[env(safe-area-inset-bottom)] backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none dark:border-zinc-800 dark:bg-zinc-950/90">
         <SubmitButton mode={mode} />
       </div>
     </form>
