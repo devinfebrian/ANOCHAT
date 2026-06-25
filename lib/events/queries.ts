@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 import { cache } from "react";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
@@ -26,6 +26,8 @@ export const getEventByIdentifier = cache(async function getEventByIdentifier(
       description: events.description,
       createdBy: events.createdBy,
       createdAt: events.createdAt,
+      cancelledAt: events.cancelledAt,
+      managementTokenHash: events.managementTokenHash,
       attendeesCount: sql<number>`(
         SELECT count(*)::int FROM ${eventAttendees} a WHERE a.event_id = ${events.id} AND a.status = 'joining'
       )`.as("attendees_count"),
@@ -60,12 +62,14 @@ export async function listUpcomingEvents(): Promise<EventListItem[]> {
       description: events.description,
       createdBy: events.createdBy,
       createdAt: events.createdAt,
+      cancelledAt: events.cancelledAt,
+      managementTokenHash: events.managementTokenHash,
       attendeesCount: sql<number>`(
         SELECT count(*)::int FROM ${eventAttendees} a WHERE a.event_id = ${events.id} AND a.status = 'joining'
       )`.as("attendees_count"),
     })
     .from(events)
-    .where(gt(events.startsAt, new Date()))
+    .where(and(gt(events.startsAt, new Date()), isNull(events.cancelledAt)))
     .orderBy(events.startsAt);
 
   return rows;

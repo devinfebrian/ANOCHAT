@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { EventTime } from "@/components/events/event-time";
 import { CopyLinkButton } from "@/components/events/copy-link-button";
 import { RsvpControl } from "@/components/events/rsvp-control";
+import { CancelEventButton } from "@/components/events/cancel-event-button";
 import { RequireUsername } from "@/components/events/require-username";
 import { Avatar } from "@/components/profile/avatar";
 import {
@@ -12,6 +13,7 @@ import {
   getUserRsvp,
   listEventAttendees,
 } from "@/lib/events/queries";
+import { verifyEventManager } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
 import type { RsvpStatus } from "@/lib/db/schema";
 
@@ -43,6 +45,8 @@ export default async function EventDetailPage({ params }: Props) {
   const currentRsvp = username ? await getUserRsvp(event.id, username) : null;
   const currentStatus = currentRsvp?.status ?? null;
   const currentNote = currentRsvp?.note ?? null;
+  const isManager = await verifyEventManager(event);
+  const cancelled = Boolean(event.cancelledAt);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -62,9 +66,16 @@ export default async function EventDetailPage({ params }: Props) {
             <EventTime date={event.startsAt} /> · {event.locationText}
           </p>
         </div>
-        <span className="shrink-0 rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-          {event.activityType}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {cancelled ? (
+            <span className="rounded-full border border-red-300 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-900 dark:text-red-300">
+              Cancelled
+            </span>
+          ) : null}
+          <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+            {event.activityType}
+          </span>
+        </div>
       </div>
 
       {event.mapUrl ? (
@@ -94,16 +105,33 @@ export default async function EventDetailPage({ params }: Props) {
 
       <div className="mt-6 flex items-center justify-end gap-4">
         <CopyLinkButton />
+        {isManager && !cancelled ? (
+          <>
+            <Link
+              href={`/events/${event.slug}/edit`}
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              Edit
+            </Link>
+            <CancelEventButton identifier={event.slug} />
+          </>
+        ) : null}
       </div>
 
-      <RequireUsername>
-        <RsvpControl
-          identifier={event.slug}
-          currentStatus={currentStatus}
-          currentNote={currentNote}
-          counts={counts}
-        />
-      </RequireUsername>
+      {cancelled ? (
+        <p className="mt-6 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          This event has been cancelled by the host.
+        </p>
+      ) : (
+        <RequireUsername>
+          <RsvpControl
+            identifier={event.slug}
+            currentStatus={currentStatus}
+            currentNote={currentNote}
+            counts={counts}
+          />
+        </RequireUsername>
+      )}
 
       <div className="mt-6 flex items-baseline gap-2">
         <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">

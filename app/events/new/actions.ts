@@ -5,6 +5,12 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { eventAttendees, events } from "@/lib/db/schema";
 import { eventFormSchema, eventFormValuesFromFormData } from "@/lib/events/schema";
+import { zonedTimeToUtc } from "@/lib/events/time";
+import {
+  generateManagementToken,
+  hashManagementToken,
+  setManagerCookie,
+} from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
 
 export type CreateEventState = {
@@ -12,28 +18,6 @@ export type CreateEventState = {
   fieldErrors?: Partial<Record<string, string[]>>;
   formError?: string;
 };
-
-function zonedTimeToUtc(isoLocal: string, timeZone: string): Date {
-  const asIfUtc = new Date(`${isoLocal}Z`);
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  const parts = Object.fromEntries(
-    fmt.formatToParts(asIfUtc).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
-  );
-  const asZoneUtc = new Date(
-    `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`,
-  );
-  const offsetMs = asZoneUtc.getTime() - asIfUtc.getTime();
-  return new Date(asIfUtc.getTime() - offsetMs);
-}
 
 export async function createEvent(
   _prev: CreateEventState,
@@ -71,6 +55,9 @@ export async function createEvent(
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "event"}-${Date.now().toString(36)}`;
 
+  const rawToken = generateManagementToken();
+  const tokenHash = hashManagementToken(rawToken);
+
   try {
     const inserted = await db.transaction(async (tx) => {
       const [event] = await tx
@@ -85,6 +72,7 @@ export async function createEvent(
           maxParticipants: rest.maxParticipants,
           description: description || null,
           createdBy,
+          managementTokenHash: tokenHash,
         })
         .returning({ id: events.id, slug: events.slug });
       await tx
@@ -92,6 +80,8 @@ export async function createEvent(
         .values({ eventId: event.id, username: createdBy, status: "joining" });
       return event;
     });
+
+    await setManagerCookie(inserted.slug, rawToken);
 
     revalidatePath("/events");
     redirect(`/events/${inserted.slug}`);

@@ -68,6 +68,10 @@ export const eventFormSchema = z.object({
 
 export type EventFormValues = z.infer<typeof eventFormSchema>;
 
+// Edit reuses every create field except createdBy (creator validated server-side).
+export const editEventSchema = eventFormSchema.omit({ createdBy: true });
+export type EditEventValues = z.infer<typeof editEventSchema>;
+
 export const rsvpStatusSchema = z.enum(RSVP_STATUSES);
 export type RsvpStatusValues = z.infer<typeof rsvpStatusSchema>;
 
