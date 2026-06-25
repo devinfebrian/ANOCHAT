@@ -6,6 +6,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -28,7 +29,7 @@ export const events = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index("events_slug_idx").on(t.slug),
+    uniqueIndex("events_slug_idx").on(t.slug),
     index("events_starts_at_idx").on(t.startsAt),
     check("events_max_participants_range", sql`${t.maxParticipants} BETWEEN 2 AND 100`),
     check("events_activity_type_valid", sql`${t.activityType} IN ('hangout','sport','food','study','game','outdoor','travel','other')`),

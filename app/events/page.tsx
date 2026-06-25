@@ -33,26 +33,28 @@ export default async function EventsPage() {
       ) : (
         <ul className="mt-6 space-y-3">
           {items.map((event) => (
-            <li
-              key={event.id}
-              className="rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="truncate text-base font-medium text-zinc-900 dark:text-zinc-50">
-                    {event.title}
-                  </p>
-                  <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
-                    <EventTime date={event.startsAt} /> · {event.locationText}
-                  </p>
+            <li key={event.id}>
+              <Link
+                href={`/events/${event.slug}`}
+                className="block rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-medium text-zinc-900 dark:text-zinc-50">
+                      {event.title}
+                    </p>
+                    <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
+                      <EventTime date={event.startsAt} /> · {event.locationText}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+                    {event.activityType}
+                  </span>
                 </div>
-                <span className="shrink-0 rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-                  {event.activityType}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                {event.attendeesCount} / {event.maxParticipants} attending
-              </p>
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  {event.attendeesCount} / {event.maxParticipants} attending
+                </p>
+              </Link>
             </li>
           ))}
         </ul>
