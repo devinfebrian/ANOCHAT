@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACTIVITY_TYPES } from "@/lib/db/schema";
+import { ACTIVITY_TYPES, RSVP_STATUSES } from "@/lib/db/schema";
 import { usernameSchema } from "@/lib/profile/schema";
 
 const MIN_TITLE = 1;
@@ -66,6 +66,9 @@ export const eventFormSchema = z.object({
 });
 
 export type EventFormValues = z.infer<typeof eventFormSchema>;
+
+export const rsvpStatusSchema = z.enum(RSVP_STATUSES);
+export type RsvpStatusValues = z.infer<typeof rsvpStatusSchema>;
 
 export const EVENT_FORM_LIMITS = {
   MIN_TITLE,
