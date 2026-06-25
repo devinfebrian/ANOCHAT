@@ -97,7 +97,7 @@ export const reports = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index("reports_target_idx").on(t.targetType, t.targetId),
+    uniqueIndex("reports_target_reporter_unique").on(t.targetType, t.targetId, t.reporterUsername),
     index("reports_status_idx").on(t.status),
     check("reports_target_type_valid", sql`${t.targetType} IN ('event')`),
     check("reports_status_valid", sql`${t.status} IN ('open','reviewed','dismissed')`),

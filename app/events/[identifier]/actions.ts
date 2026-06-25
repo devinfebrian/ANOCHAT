@@ -11,6 +11,7 @@ import {
   rsvpStatusSchema,
 } from "@/lib/events/schema";
 import { reportSchema } from "@/lib/reports/schema";
+import { checkReportRateLimit } from "@/lib/reports/rate-limit";
 import { zonedTimeToUtc } from "@/lib/events/time";
 import { getEventByIdentifier } from "@/lib/events/queries";
 import { clearManagerCookie, verifyEventManager } from "@/lib/events/management";
@@ -217,6 +218,17 @@ export async function reportEvent(
   if (username === event.createdBy) {
     return { ok: false, formError: "You can't report your own event." };
   }
+  if (event.cancelledAt) {
+    return { ok: false, formError: "This event has been cancelled." };
+  }
+
+  const allowed = await checkReportRateLimit(username, "event");
+  if (!allowed) {
+    return {
+      ok: false,
+      formError: "Too many reports submitted. Try again in a few minutes.",
+    };
+  }
 
   const parsed = reportSchema.safeParse({
     targetType: "event",
@@ -233,12 +245,22 @@ export async function reportEvent(
     };
   }
 
-  await db.insert(reports).values({
-    targetType: parsed.data.targetType,
-    targetId: parsed.data.targetId,
-    reporterUsername: parsed.data.reporterUsername,
-    reason: parsed.data.reason,
-  });
+  try {
+    await db.insert(reports).values({
+      targetType: parsed.data.targetType,
+      targetId: parsed.data.targetId,
+      reporterUsername: parsed.data.reporterUsername,
+      reason: parsed.data.reason,
+    });
+  } catch (error) {
+    const code =
+      (error as { code?: string })?.code ??
+      (error as { cause?: { code?: string } })?.cause?.code;
+    if (code === "23505") {
+      return { ok: false, formError: "You've already reported this event." };
+    }
+    throw error;
+  }
 
   return { ok: true };
 }
