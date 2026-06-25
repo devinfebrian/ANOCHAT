@@ -105,46 +105,56 @@ export default async function EventDetailPage({ params }: Props) {
         />
       </RequireUsername>
 
-      <div className="mt-6 space-y-6">
+      <div className="mt-6 flex items-baseline gap-2">
+        <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          {counts.joining} joining
+        </span>
+        <span className="text-sm text-zinc-500 dark:text-zinc-400">
+          / {event.maxParticipants} spots
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-6">
         {STATUS_GROUPS.map(({ status, label }) => {
           const group = attendees.filter((a) => a.status === status);
-          if (group.length === 0) return null;
+          if (group.length === 0 && status === "declined") return null;
           return (
             <div key={status}>
               <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 {label} <span className="font-normal">· {group.length}</span>
               </h2>
-              <ul className="mt-3 space-y-2">
-                {group.map((a) => (
-                  <li key={`${a.eventId}-${a.username}`} className="flex items-center gap-3 text-sm">
-                    <Avatar username={a.username} size={28} />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-zinc-900 dark:text-zinc-50">{a.username}</span>
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                          RSVPed <EventTime date={a.joinedAt} />
-                        </span>
+              {group.length === 0 ? (
+                <p className="mt-2 text-sm italic text-zinc-400 dark:text-zinc-500">
+                  No one yet · be the first
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {group.map((a) => (
+                    <li key={`${a.eventId}-${a.username}`} className="flex items-center gap-3 text-sm">
+                      <Avatar username={a.username} size={28} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-zinc-900 dark:text-zinc-50">{a.username}</span>
+                          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                            RSVPed <EventTime date={a.joinedAt} />
+                          </span>
+                        </div>
+                        {a.note ? (
+                          <p
+                            className="mt-0.5 truncate text-xs text-zinc-600 dark:text-zinc-400"
+                            title={a.note}
+                          >
+                            {a.note}
+                          </p>
+                        ) : null}
                       </div>
-                      {a.note ? (
-                        <p
-                          className="mt-0.5 truncate text-xs text-zinc-600 dark:text-zinc-400"
-                          title={a.note}
-                        >
-                          {a.note}
-                        </p>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           );
         })}
-        {attendees.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            No responses yet.
-          </p>
-        ) : null}
       </div>
     </div>
   );
