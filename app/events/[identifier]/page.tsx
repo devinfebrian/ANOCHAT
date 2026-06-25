@@ -27,8 +27,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = `${event.title} · ANOCHAT`;
   const description = event.description ?? undefined;
   const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const host = h.get("host") ?? "localhost";
+  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0].trim();
+  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "localhost").split(",")[0].trim();
   const url = `${proto}://${host}/events/${event.slug}`;
   return {
     title,
