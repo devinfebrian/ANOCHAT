@@ -12,6 +12,7 @@ import {
   setManagerCookie,
 } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
+import { checkEventCreateRateLimit } from "@/lib/events/rate-limit";
 
 export type CreateEventState = {
   ok: boolean;
@@ -28,6 +29,14 @@ export async function createEvent(
     return {
       ok: false,
       formError: "Set a username before creating an event.",
+    };
+  }
+
+  const allowed = await checkEventCreateRateLimit(username);
+  if (!allowed) {
+    return {
+      ok: false,
+      formError: "Too many events created. Try again in a few minutes.",
     };
   }
 
