@@ -13,6 +13,28 @@ export type CreateEventState = {
   formError?: string;
 };
 
+function zonedTimeToUtc(isoLocal: string, timeZone: string): Date {
+  const asIfUtc = new Date(`${isoLocal}Z`);
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const parts = Object.fromEntries(
+    fmt.formatToParts(asIfUtc).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
+  );
+  const asZoneUtc = new Date(
+    `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`,
+  );
+  const offsetMs = asZoneUtc.getTime() - asIfUtc.getTime();
+  return new Date(asIfUtc.getTime() - offsetMs);
+}
+
 export async function createEvent(
   _prev: CreateEventState,
   formData: FormData,
@@ -34,7 +56,15 @@ export async function createEvent(
     };
   }
 
-  const { createdBy, mapUrl, description, startsAt, ...rest } = parsed.data;
+  const { createdBy, mapUrl, description, startsAt, timezone, ...rest } = parsed.data;
+  const startsAtUtc = zonedTimeToUtc(startsAt, timezone);
+  if (startsAtUtc.getTime() <= Date.now()) {
+    return {
+      ok: false,
+      fieldErrors: { startsAt: ["Date and time must be in the future"] },
+    };
+  }
+
   const slug = `${rest.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -49,7 +79,7 @@ export async function createEvent(
           title: rest.title,
           slug,
           activityType: rest.activityType,
-          startsAt: new Date(startsAt),
+          startsAt: startsAtUtc,
           locationText: rest.locationText,
           mapUrl: mapUrl || null,
           maxParticipants: rest.maxParticipants,
@@ -66,7 +96,7 @@ export async function createEvent(
     revalidatePath("/events");
     redirect(`/events/${inserted.id}`);
   } catch (error) {
-    if (error instanceof Error && /is full/.test(error.message)) {
+    if (error instanceof Error && (error as { code?: string }).code === "45000") {
       return { ok: false, formError: "Event is full." };
     }
     throw error;

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { gt, sql } from "drizzle-orm";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { eventAttendees, events, type Event } from "@/lib/db/schema";
@@ -25,6 +25,7 @@ export async function listUpcomingEvents(): Promise<EventListItem[]> {
       )`.as("attendees_count"),
     })
     .from(events)
+    .where(gt(events.startsAt, new Date()))
     .orderBy(events.startsAt);
 
   return rows;

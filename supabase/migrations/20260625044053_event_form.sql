@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS "event_attendees" (
 
 CREATE INDEX IF NOT EXISTS "event_attendees_username_idx" ON "event_attendees" ("username");
 
+ALTER TABLE "event_attendees" ENABLE ROW LEVEL SECURITY;
+
 -- Capacity trigger: reject inserts past the event's max_participants.
 CREATE OR REPLACE FUNCTION "enforce_event_capacity"() RETURNS trigger AS $$
 DECLARE
@@ -47,7 +49,8 @@ BEGIN
   END IF;
   SELECT count(*) INTO current_count FROM "event_attendees" WHERE "event_id" = NEW."event_id";
   IF current_count >= cap THEN
-    RAISE EXCEPTION 'Event % is full (% / %)', NEW."event_id", current_count, cap;
+    RAISE EXCEPTION 'Event % is full (% / %)', NEW."event_id", current_count, cap
+      USING ERRCODE = '45000';
   END IF;
   RETURN NEW;
 END;

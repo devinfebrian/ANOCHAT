@@ -24,8 +24,18 @@ export const eventFormSchema = z.object({
     .refine((value) => {
       const date = new Date(value);
       return !Number.isNaN(date.getTime());
-    }, "Invalid date and time")
-    .refine((value) => new Date(value).getTime() > Date.now(), "Date and time must be in the future"),
+    }, "Invalid date and time"),
+  timezone: z
+    .string()
+    .min(1, "Timezone is required")
+    .refine((value) => {
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: value });
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid timezone"),
   locationText: z
     .string()
     .trim()
@@ -71,10 +81,10 @@ export function eventFormValuesFromFormData(formData: FormData) {
     title: String(formData.get("title") ?? ""),
     activityType: String(formData.get("activityType") ?? ""),
     startsAt: String(formData.get("startsAt") ?? ""),
+    timezone: String(formData.get("timezone") ?? ""),
     locationText: String(formData.get("locationText") ?? ""),
     mapUrl: String(formData.get("mapUrl") ?? ""),
     maxParticipants: formData.get("maxParticipants"),
     description: String(formData.get("description") ?? ""),
-    createdBy: String(formData.get("createdBy") ?? ""),
   };
 }

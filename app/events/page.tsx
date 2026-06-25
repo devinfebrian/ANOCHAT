@@ -1,17 +1,6 @@
 import Link from "next/link";
 import { listUpcomingEvents } from "@/lib/events/queries";
-
-const dateFormatter = new Intl.DateTimeFormat("en", {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
-function formatStartsAt(value: Date) {
-  return dateFormatter.format(value);
-}
+import { EventTime } from "@/components/events/event-time";
 
 export const metadata = { title: "Events · ANOCHAT" };
 
@@ -54,7 +43,7 @@ export default async function EventsPage() {
                     {event.title}
                   </p>
                   <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">
-                    {formatStartsAt(event.startsAt)} · {event.locationText}
+                    <EventTime date={event.startsAt} /> · {event.locationText}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">

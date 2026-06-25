@@ -5,7 +5,6 @@ import { useFormStatus } from "react-dom";
 import { ACTIVITY_TYPES } from "@/lib/db/schema";
 import { EVENT_FORM_LIMITS } from "@/lib/events/schema";
 import { createEvent, type CreateEventState } from "@/app/events/new/actions";
-import { useUsername } from "@/lib/profile/use-username";
 
 const initialState: CreateEventState = { ok: false };
 
@@ -30,13 +29,16 @@ function SubmitButton() {
 }
 
 export function EventForm() {
-  const { username } = useUsername();
   const [state, formAction] = useActionState(createEvent, initialState);
   const fieldErrors = state.fieldErrors ?? {};
 
   return (
     <form action={formAction} className="space-y-5">
-      <input type="hidden" name="createdBy" value={username ?? ""} />
+      <input
+        type="hidden"
+        name="timezone"
+        value={typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC"}
+      />
 
       <div>
         <label htmlFor="title" className="block text-sm font-medium text-zinc-900 dark:text-zinc-50">
