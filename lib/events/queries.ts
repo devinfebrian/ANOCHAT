@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { cache } from "react";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
@@ -69,6 +69,37 @@ export async function listUpcomingEvents(): Promise<EventListItem[]> {
     .from(events)
     .where(and(gt(events.startsAt, new Date()), isNull(events.cancelledAt)))
     .orderBy(events.startsAt);
+
+  return rows;
+}
+
+export const isEventPast = cache(async function isEventPast(startsAt: Date): Promise<boolean> {
+  await connection();
+  return startsAt.getTime() <= Date.now();
+});
+
+export async function listPastEvents(): Promise<EventListItem[]> {
+  await connection();
+  const rows = await db
+    .select({
+      id: events.id,
+      title: events.title,
+      slug: events.slug,
+      activityType: events.activityType,
+      startsAt: events.startsAt,
+      locationText: events.locationText,
+      mapUrl: events.mapUrl,
+      maxParticipants: events.maxParticipants,
+      description: events.description,
+      createdBy: events.createdBy,
+      createdAt: events.createdAt,
+      attendeesCount: sql<number>`(
+        SELECT count(*)::int FROM ${eventAttendees} a WHERE a.event_id = ${events.id} AND a.status = 'joining'
+      )`.as("attendees_count"),
+    })
+    .from(events)
+    .where(and(lt(events.startsAt, new Date()), isNull(events.cancelledAt)))
+    .orderBy(desc(events.startsAt));
 
   return rows;
 }

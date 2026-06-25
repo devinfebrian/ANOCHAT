@@ -12,6 +12,7 @@ import {
   getEventByIdentifier,
   getRsvpCounts,
   getUserRsvp,
+  isEventPast,
   listEventAttendees,
 } from "@/lib/events/queries";
 import { verifyEventManager } from "@/lib/events/management";
@@ -66,6 +67,8 @@ export default async function EventDetailPage({ params }: Props) {
   const currentNote = currentRsvp?.note ?? null;
   const isManager = await verifyEventManager(event);
   const cancelled = Boolean(event.cancelledAt);
+  const isPast = await isEventPast(event.startsAt);
+  const totalAttendees = attendees.length;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-10 pb-24 md:pb-10">
@@ -89,6 +92,10 @@ export default async function EventDetailPage({ params }: Props) {
           {cancelled ? (
             <span className="rounded-full border border-red-300 px-2 py-0.5 text-xs font-medium text-red-700 dark:border-red-900 dark:text-red-300">
               Cancelled
+            </span>
+          ) : isPast ? (
+            <span className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              Ended
             </span>
           ) : null}
           <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
@@ -144,6 +151,26 @@ export default async function EventDetailPage({ params }: Props) {
         <p className="mt-6 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
           This event has been cancelled by the host.
         </p>
+      ) : isPast ? (
+        <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+          This event has ended. RSVP is closed
+          {currentStatus ? ` · you marked: ${currentStatus}` : ""}.
+        </div>
+      ) : totalAttendees === 0 ? (
+        <div className="mt-6 rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center dark:border-zinc-700">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No one has RSVPed yet.</p>
+          <p className="mt-1 text-base font-medium text-zinc-700 dark:text-zinc-300">Be the first to join.</p>
+          <div className="mt-4">
+            <RequireUsername>
+              <RsvpControl
+                identifier={event.slug}
+                currentStatus={currentStatus}
+                currentNote={currentNote}
+                counts={counts}
+              />
+            </RequireUsername>
+          </div>
+        </div>
       ) : (
         <RequireUsername>
           <RsvpControl

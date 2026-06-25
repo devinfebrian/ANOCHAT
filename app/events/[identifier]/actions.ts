@@ -50,6 +50,9 @@ export async function setRsvp(
   if (event.cancelledAt) {
     return { ok: false, formError: "This event has been cancelled." };
   }
+  if (event.startsAt.getTime() <= Date.now() && status !== "declined") {
+    return { ok: false, formError: "Event has already started. RSVP closed." };
+  }
 
   try {
     await db
