@@ -1,10 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { eq, isNull, and } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { eventAttendees } from "@/lib/db/schema";
-import { rsvpNoteSchema, rsvpStatusSchema } from "@/lib/events/schema";
+import { eventAttendees, events } from "@/lib/db/schema";
+import {
+  editEventSchema,
+  eventFormValuesFromFormData,
+  rsvpNoteSchema,
+  rsvpStatusSchema,
+} from "@/lib/events/schema";
+import { zonedTimeToUtc } from "@/lib/events/time";
 import { getEventByIdentifier } from "@/lib/events/queries";
+import { clearManagerCookie, verifyEventManager } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
 
 export type SetRsvpState = {
@@ -39,6 +47,9 @@ export async function setRsvp(
   if (!event) {
     return { ok: false, formError: "Event not found." };
   }
+  if (event.cancelledAt) {
+    return { ok: false, formError: "This event has been cancelled." };
+  }
 
   try {
     await db
@@ -60,5 +71,116 @@ export async function setRsvp(
 
   revalidatePath("/events");
   revalidatePath(`/events/${event.slug}`);
+  return { ok: true };
+}
+
+export type EditEventState = {
+  ok: boolean;
+  fieldErrors?: Partial<Record<string, string[]>>;
+  formError?: string;
+};
+
+export async function editEvent(
+  _prev: EditEventState,
+  formData: FormData,
+): Promise<EditEventState> {
+  const username = await getServerUsername();
+  if (!username) {
+    return { ok: false, formError: "Set a username before editing an event." };
+  }
+
+  const identifier = String(formData.get("identifier") ?? "");
+  if (!identifier) {
+    return { ok: false, formError: "Event not found." };
+  }
+
+  const event = await getEventByIdentifier(identifier);
+  if (!event) {
+    return { ok: false, formError: "Event not found." };
+  }
+  if (event.cancelledAt) {
+    return { ok: false, formError: "Cancelled events can't be edited." };
+  }
+  const allowed = await verifyEventManager(event);
+  if (!allowed) {
+    return { ok: false, formError: "Only the creator can edit this event." };
+  }
+
+  const parsed = editEventSchema.safeParse(eventFormValuesFromFormData(formData));
+  if (!parsed.success) {
+    return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+
+  const { mapUrl, description, startsAt, timezone, ...rest } = parsed.data;
+  const startsAtUtc = zonedTimeToUtc(startsAt, timezone);
+  if (startsAtUtc.getTime() <= Date.now()) {
+    return { ok: false, fieldErrors: { startsAt: ["Date and time must be in the future"] } };
+  }
+
+  const updated = await db
+    .update(events)
+    .set({
+      title: rest.title,
+      activityType: rest.activityType,
+      startsAt: startsAtUtc,
+      locationText: rest.locationText,
+      mapUrl: mapUrl || null,
+      maxParticipants: rest.maxParticipants,
+      description: description || null,
+    })
+    .where(and(eq(events.id, event.id), isNull(events.cancelledAt)))
+    .returning({ id: events.id });
+
+  if (updated.length === 0) {
+    return { ok: false, formError: "Cancelled events can't be edited." };
+  }
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${event.slug}`);
+  revalidatePath(`/events/${event.slug}/edit`);
+  return { ok: true };
+}
+
+export type CancelEventState = {
+  ok: boolean;
+  formError?: string;
+};
+
+export async function cancelEvent(
+  _prev: CancelEventState,
+  formData: FormData,
+): Promise<CancelEventState> {
+  const identifier = String(formData.get("identifier") ?? "");
+  if (!identifier) {
+    return { ok: false, formError: "Event not found." };
+  }
+
+  const event = await getEventByIdentifier(identifier);
+  if (!event) {
+    return { ok: false, formError: "Event not found." };
+  }
+  if (event.cancelledAt) {
+    return { ok: false, formError: "Event is already cancelled." };
+  }
+  const allowed = await verifyEventManager(event);
+  if (!allowed) {
+    return { ok: false, formError: "Only the creator can cancel this event." };
+  }
+
+  const updated = await db
+    .update(events)
+    .set({ cancelledAt: new Date() })
+    .where(and(eq(events.id, event.id), isNull(events.cancelledAt)))
+    .returning({ id: events.id });
+
+  if (updated.length === 0) {
+    return { ok: false, formError: "Event is already cancelled." };
+  }
+
+  await clearManagerCookie(event.slug);
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${event.slug}`);
+  revalidatePath(`/events/${event.slug}/edit`);
   return { ok: true };
 }

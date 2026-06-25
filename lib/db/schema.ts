@@ -27,6 +27,8 @@ export const events = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    managementTokenHash: text("management_token_hash"),
   },
   (t) => [
     uniqueIndex("events_slug_idx").on(t.slug),
