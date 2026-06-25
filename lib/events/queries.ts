@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { eventAttendees, events, type Event, type EventAttendee, type RsvpStatus } from "@/lib/db/schema";
 
-export type EventListItem = Event & { attendeesCount: number };
+export type EventListItem = Omit<Event, "cancelledAt" | "managementTokenHash"> & { attendeesCount: number };
 export type EventDetail = Event & { attendeesCount: number };
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -62,8 +62,6 @@ export async function listUpcomingEvents(): Promise<EventListItem[]> {
       description: events.description,
       createdBy: events.createdBy,
       createdAt: events.createdAt,
-      cancelledAt: events.cancelledAt,
-      managementTokenHash: events.managementTokenHash,
       attendeesCount: sql<number>`(
         SELECT count(*)::int FROM ${eventAttendees} a WHERE a.event_id = ${events.id} AND a.status = 'joining'
       )`.as("attendees_count"),

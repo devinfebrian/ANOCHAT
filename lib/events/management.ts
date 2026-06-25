@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getServerUsername } from "@/lib/profile/server";
 import type { Event } from "@/lib/db/schema";
@@ -53,5 +53,7 @@ export async function verifyEventManager(
   if (!event.managementTokenHash) return false;
   const raw = await readManagerToken(event.slug);
   if (!raw) return false;
-  return hashManagementToken(raw) === event.managementTokenHash;
+  const submitted = Buffer.from(hashManagementToken(raw), "hex");
+  const stored = Buffer.from(event.managementTokenHash, "hex");
+  return submitted.length === stored.length && timingSafeEqual(submitted, stored);
 }

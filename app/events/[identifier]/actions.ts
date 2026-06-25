@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, isNull, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { eventAttendees, events } from "@/lib/db/schema";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/lib/events/schema";
 import { zonedTimeToUtc } from "@/lib/events/time";
 import { getEventByIdentifier } from "@/lib/events/queries";
-import { verifyEventManager } from "@/lib/events/management";
+import { clearManagerCookie, verifyEventManager } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
 
 export type SetRsvpState = {
@@ -117,7 +117,7 @@ export async function editEvent(
     return { ok: false, fieldErrors: { startsAt: ["Date and time must be in the future"] } };
   }
 
-  await db
+  const updated = await db
     .update(events)
     .set({
       title: rest.title,
@@ -128,7 +128,12 @@ export async function editEvent(
       maxParticipants: rest.maxParticipants,
       description: description || null,
     })
-    .where(eq(events.id, event.id));
+    .where(and(eq(events.id, event.id), isNull(events.cancelledAt)))
+    .returning({ id: events.id });
+
+  if (updated.length === 0) {
+    return { ok: false, formError: "Cancelled events can't be edited." };
+  }
 
   revalidatePath("/events");
   revalidatePath(`/events/${event.slug}`);
@@ -162,10 +167,17 @@ export async function cancelEvent(
     return { ok: false, formError: "Only the creator can cancel this event." };
   }
 
-  await db
+  const updated = await db
     .update(events)
     .set({ cancelledAt: new Date() })
-    .where(eq(events.id, event.id));
+    .where(and(eq(events.id, event.id), isNull(events.cancelledAt)))
+    .returning({ id: events.id });
+
+  if (updated.length === 0) {
+    return { ok: false, formError: "Event is already cancelled." };
+  }
+
+  await clearManagerCookie(event.slug);
 
   revalidatePath("/events");
   revalidatePath(`/events/${event.slug}`);
