@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeaderUserMenu } from "@/components/profile/header-user-menu";
 
 export function SiteHeader() {
   return (
@@ -18,6 +19,9 @@ export function SiteHeader() {
             Create
           </Link>
         </nav>
+        <div className="flex items-center">
+          <HeaderUserMenu />
+        </div>
       </div>
     </header>
   );
