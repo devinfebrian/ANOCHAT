@@ -95,7 +95,7 @@ export default async function EventDetailPage({ params }: Props) {
             </span>
           ) : isPast ? (
             <span className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-              Ended
+              Started
             </span>
           ) : null}
           <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
@@ -153,8 +153,11 @@ export default async function EventDetailPage({ params }: Props) {
         </p>
       ) : isPast ? (
         <div className="mt-6 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-          This event has ended. RSVP is closed
-          {currentStatus ? ` · you marked: ${currentStatus}` : ""}.
+          This event has started. RSVP is closed
+          {currentStatus
+            ? ` · you marked: ${STATUS_GROUPS.find((g) => g.status === currentStatus)?.label ?? currentStatus}`
+            : ""}
+          .
         </div>
       ) : totalAttendees === 0 ? (
         <div className="mt-6 rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center dark:border-zinc-700">

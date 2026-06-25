@@ -29,7 +29,7 @@ export function EventCard({ event, variant = "upcoming" }: EventCardProps) {
           <div className="flex shrink-0 items-center gap-2">
             {isPast ? (
               <span className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                Ended
+                Started
               </span>
             ) : null}
             <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
