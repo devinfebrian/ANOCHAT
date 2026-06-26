@@ -15,11 +15,10 @@ const LIST_PAGE_SIZE = 20;
 
 export function parseCursor(raw: string | undefined): EventCursor | undefined {
   if (!raw) return undefined;
-  const decoded = decodeURIComponent(raw);
-  const sep = decoded.lastIndexOf("|");
+  const sep = raw.lastIndexOf("|");
   if (sep < 0) return undefined;
-  const iso = decoded.slice(0, sep);
-  const id = decoded.slice(sep + 1);
+  const iso = raw.slice(0, sep);
+  const id = raw.slice(sep + 1);
   const startsAt = new Date(iso);
   if (Number.isNaN(startsAt.getTime()) || !UUID_RE.test(id)) return undefined;
   return { startsAt, id };
@@ -101,10 +100,12 @@ export async function listUpcomingEvents(
       ),
     )
     .orderBy(asc(events.startsAt), asc(events.id))
-    .limit(take);
+    .limit(take + 1);
 
-  const nextCursor = rows.length === take ? { startsAt: rows[rows.length - 1].startsAt, id: rows[rows.length - 1].id } : null;
-  return { items: rows, nextCursor };
+  const hasMore = rows.length > take;
+  const items = hasMore ? rows.slice(0, take) : rows;
+  const nextCursor = hasMore ? { startsAt: items[items.length - 1].startsAt, id: items[items.length - 1].id } : null;
+  return { items, nextCursor };
 }
 
 export const isEventPast = cache(async function isEventPast(startsAt: Date): Promise<boolean> {
@@ -146,10 +147,12 @@ export async function listPastEvents(
       ),
     )
     .orderBy(desc(events.startsAt), desc(events.id))
-    .limit(take);
+    .limit(take + 1);
 
-  const nextCursor = rows.length === take ? { startsAt: rows[rows.length - 1].startsAt, id: rows[rows.length - 1].id } : null;
-  return { items: rows, nextCursor };
+  const hasMore = rows.length > take;
+  const items = hasMore ? rows.slice(0, take) : rows;
+  const nextCursor = hasMore ? { startsAt: items[items.length - 1].startsAt, id: items[items.length - 1].id } : null;
+  return { items, nextCursor };
 }
 
 export type RsvpCounts = { joining: number; interested: number; declined: number };
