@@ -13,6 +13,22 @@ export type EventListPage = { items: EventListItem[]; nextCursor: EventCursor | 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const LIST_PAGE_SIZE = 20;
 
+export function parseCursor(raw: string | undefined): EventCursor | undefined {
+  if (!raw) return undefined;
+  const decoded = decodeURIComponent(raw);
+  const sep = decoded.lastIndexOf("|");
+  if (sep < 0) return undefined;
+  const iso = decoded.slice(0, sep);
+  const id = decoded.slice(sep + 1);
+  const startsAt = new Date(iso);
+  if (Number.isNaN(startsAt.getTime()) || !UUID_RE.test(id)) return undefined;
+  return { startsAt, id };
+}
+
+export function encodeCursor(c: EventCursor): string {
+  return `${c.startsAt.toISOString()}|${c.id}`;
+}
+
 export const getEventByIdentifier = cache(async function getEventByIdentifier(
   identifier: string,
 ): Promise<EventDetail | null> {
@@ -51,7 +67,11 @@ export async function listEventAttendees(eventId: string): Promise<EventAttendee
     .orderBy(asc(eventAttendees.joinedAt));
 }
 
-export async function listUpcomingEvents(cursor?: EventCursor, take = LIST_PAGE_SIZE): Promise<EventListPage> {
+export async function listUpcomingEvents(
+  cursor?: EventCursor,
+  take = LIST_PAGE_SIZE,
+  now: Date = new Date(),
+): Promise<EventListPage> {
   await connection();
   const rows = await db
     .select({
@@ -73,7 +93,7 @@ export async function listUpcomingEvents(cursor?: EventCursor, take = LIST_PAGE_
     .from(events)
     .where(
       and(
-        gt(events.startsAt, new Date()),
+        gt(events.startsAt, now),
         isNull(events.cancelledAt),
         cursor
           ? or(gt(events.startsAt, cursor.startsAt), and(eq(events.startsAt, cursor.startsAt), gt(events.id, cursor.id)))
@@ -87,12 +107,16 @@ export async function listUpcomingEvents(cursor?: EventCursor, take = LIST_PAGE_
   return { items: rows, nextCursor };
 }
 
-export async function isEventPast(startsAt: Date): Promise<boolean> {
+export const isEventPast = cache(async function isEventPast(startsAt: Date): Promise<boolean> {
   await connection();
   return startsAt.getTime() <= Date.now();
-}
+});
 
-export async function listPastEvents(cursor?: EventCursor, take = LIST_PAGE_SIZE): Promise<EventListPage> {
+export async function listPastEvents(
+  cursor?: EventCursor,
+  take = LIST_PAGE_SIZE,
+  now: Date = new Date(),
+): Promise<EventListPage> {
   await connection();
   const rows = await db
     .select({
@@ -114,7 +138,7 @@ export async function listPastEvents(cursor?: EventCursor, take = LIST_PAGE_SIZE
     .from(events)
     .where(
       and(
-        lt(events.startsAt, new Date()),
+        lt(events.startsAt, now),
         isNull(events.cancelledAt),
         cursor
           ? or(lt(events.startsAt, cursor.startsAt), and(eq(events.startsAt, cursor.startsAt), lt(events.id, cursor.id)))

@@ -1,26 +1,8 @@
 import Link from "next/link";
 import { EventCard } from "@/components/events/event-card";
-import { listPastEvents, listUpcomingEvents, type EventCursor } from "@/lib/events/queries";
+import { encodeCursor, listPastEvents, listUpcomingEvents, parseCursor } from "@/lib/events/queries";
 
 export const metadata = { title: "Events · ANOCHAT" };
-
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function parseCursor(raw: string | undefined): EventCursor | undefined {
-  if (!raw) return undefined;
-  const decoded = decodeURIComponent(raw);
-  const sep = decoded.lastIndexOf("|");
-  if (sep < 0) return undefined;
-  const iso = decoded.slice(0, sep);
-  const id = decoded.slice(sep + 1);
-  const startsAt = new Date(iso);
-  if (Number.isNaN(startsAt.getTime()) || !UUID_RE.test(id)) return undefined;
-  return { startsAt, id };
-}
-
-function encodeCursor(c: EventCursor): string {
-  return `${c.startsAt.toISOString()}|${c.id}`;
-}
 
 type Props = { searchParams: Promise<{ upcomingCursor?: string; pastCursor?: string }> };
 
@@ -29,9 +11,10 @@ export default async function EventsPage({ searchParams }: Props) {
   const upcomingCursor = parseCursor(uRaw);
   const pastCursor = parseCursor(pRaw);
 
+  const now = new Date();
   const [{ items: upcoming, nextCursor: nextUpcoming }, { items: past, nextCursor: nextPast }] = await Promise.all([
-    listUpcomingEvents(upcomingCursor),
-    listPastEvents(pastCursor),
+    listUpcomingEvents(upcomingCursor, undefined, now),
+    listPastEvents(pastCursor, undefined, now),
   ]);
 
   const validURaw = upcomingCursor ? uRaw : undefined;
