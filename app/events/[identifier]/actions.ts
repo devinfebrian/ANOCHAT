@@ -16,6 +16,7 @@ import { zonedTimeToUtc } from "@/lib/events/time";
 import { getEventByIdentifier } from "@/lib/events/queries";
 import { clearManagerCookie, verifyEventManager } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
+import { getOrCreateDeviceId } from "@/lib/profile/device";
 
 export type SetRsvpState = {
   ok: boolean;
@@ -56,15 +57,71 @@ export async function setRsvp(
     return { ok: false, formError: "Event has already started. RSVP closed." };
   }
 
+  const { hash: deviceHash } = await getOrCreateDeviceId();
+
   try {
-    await db
-      .insert(eventAttendees)
-      .values({ eventId: event.id, username, status, note })
-      .onConflictDoUpdate({
-        target: [eventAttendees.eventId, eventAttendees.username],
-        set: { status, joinedAt: new Date(), note },
-      });
+    await db.transaction(async (tx) => {
+      const existing = await tx
+        .select({
+          status: eventAttendees.status,
+          deviceHash: eventAttendees.deviceHash,
+        })
+        .from(eventAttendees)
+        .where(
+          and(
+            eq(eventAttendees.eventId, event.id),
+            eq(eventAttendees.username, username),
+          ),
+        )
+        .for("update")
+        .limit(1);
+
+      if (existing.length === 0) {
+        await tx.insert(eventAttendees).values({
+          eventId: event.id,
+          username,
+          status,
+          note,
+          deviceHash,
+        });
+        return;
+      }
+
+      const row = existing[0];
+      if (row.deviceHash !== deviceHash) {
+        throw new RsvpError(
+          "That username is already in use on another device. Pick a different name.",
+        );
+      }
+
+      const statusChanged = row.status !== status;
+      const update: {
+        status: typeof status;
+        note: typeof note;
+        deviceHash: string;
+        joinedAt?: Date;
+      } = {
+        status,
+        note,
+        deviceHash,
+      };
+      if (statusChanged) {
+        update.joinedAt = new Date();
+      }
+      await tx
+        .update(eventAttendees)
+        .set(update)
+        .where(
+          and(
+            eq(eventAttendees.eventId, event.id),
+            eq(eventAttendees.username, username),
+          ),
+        );
+    });
   } catch (error) {
+    if (error instanceof RsvpError) {
+      return { ok: false, formError: error.message };
+    }
     const code =
       (error as { code?: string })?.code ??
       (error as { cause?: { code?: string } })?.cause?.code;
@@ -73,6 +130,45 @@ export async function setRsvp(
     }
     throw error;
   }
+
+  revalidatePath("/events");
+  revalidatePath(`/events/${event.slug}`);
+  return { ok: true };
+}
+
+class RsvpError extends Error {}
+
+export type RemoveRsvpState = {
+  ok: boolean;
+  formError?: string;
+};
+
+export async function removeRsvp(
+  _prev: RemoveRsvpState,
+  formData: FormData,
+): Promise<RemoveRsvpState> {
+  const identifier = String(formData.get("identifier") ?? "");
+  if (!identifier) {
+    return { ok: false, formError: "Event not found." };
+  }
+
+  const event = await getEventByIdentifier(identifier);
+  if (!event) {
+    return { ok: false, formError: "Event not found." };
+  }
+  if (event.cancelledAt) {
+    return { ok: false, formError: "Cancelled events are read-only." };
+  }
+
+  const { hash: deviceHash } = await getOrCreateDeviceId();
+  await db
+    .delete(eventAttendees)
+    .where(
+      and(
+        eq(eventAttendees.eventId, event.id),
+        eq(eventAttendees.deviceHash, deviceHash),
+      ),
+    );
 
   revalidatePath("/events");
   revalidatePath(`/events/${event.slug}`);
@@ -222,7 +318,9 @@ export async function reportEvent(
     return { ok: false, formError: "This event has been cancelled." };
   }
 
-  const allowed = await checkReportRateLimit(username, "event");
+  const { hash: deviceHash } = await getOrCreateDeviceId();
+
+  const allowed = await checkReportRateLimit(deviceHash, "event");
   if (!allowed) {
     return {
       ok: false,
@@ -250,6 +348,7 @@ export async function reportEvent(
       targetType: parsed.data.targetType,
       targetId: parsed.data.targetId,
       reporterUsername: parsed.data.reporterUsername,
+      reporterDeviceHash: deviceHash,
       reason: parsed.data.reason,
     });
   } catch (error) {

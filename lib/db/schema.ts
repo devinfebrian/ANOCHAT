@@ -30,10 +30,12 @@ export const events = pgTable(
       .defaultNow(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     managementTokenHash: text("management_token_hash"),
+    creatorDeviceHash: text("creator_device_hash").notNull(),
   },
   (t) => [
     uniqueIndex("events_slug_idx").on(t.slug),
     index("events_starts_at_idx").on(t.startsAt),
+    index("events_creator_device_hash_idx").on(t.creatorDeviceHash),
     check("events_max_participants_range", sql`${t.maxParticipants} BETWEEN 2 AND 100`),
     check("events_activity_type_valid", sql`${t.activityType} IN ('hangout','sport','food','study','game','outdoor','travel','other')`),
     check("events_title_length", sql`char_length(${t.title}) BETWEEN 1 AND 120`),
@@ -59,10 +61,15 @@ export const eventAttendees = pgTable(
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    deviceHash: text("device_hash").notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.eventId, t.username] }),
     index("event_attendees_username_idx").on(t.username),
+    index("event_attendees_device_hash_idx").on(t.deviceHash),
+    uniqueIndex("event_attendees_event_device_active_unique")
+      .on(t.eventId, t.deviceHash)
+      .where(sql`${t.status} <> 'declined'`),
     check("event_attendees_status_valid", sql`${t.status} IN ('joining','interested','declined')`),
     check("event_attendees_note_length", sql`char_length(coalesce(${t.note}, '')) <= 120`),
     check(
@@ -90,6 +97,7 @@ export const reports = pgTable(
     targetType: text("target_type").notNull().$type<ReportTargetType>(),
     targetId: uuid("target_id").notNull(),
     reporterUsername: text("reporter_username").notNull(),
+    reporterDeviceHash: text("reporter_device_hash").notNull(),
     reason: text("reason").notNull(),
     status: text("status").notNull().$type<ReportStatus>().default("open"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -97,8 +105,8 @@ export const reports = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("reports_target_reporter_unique").on(t.targetType, t.targetId, t.reporterUsername),
     index("reports_status_idx").on(t.status),
+    index("reports_reporter_device_hash_idx").on(t.reporterDeviceHash),
     check("reports_target_type_valid", sql`${t.targetType} IN ('event')`),
     check("reports_status_valid", sql`${t.status} IN ('open','reviewed','dismissed')`),
     check("reports_reason_length", sql`char_length(${t.reason}) BETWEEN 1 AND 280`),
@@ -126,3 +134,24 @@ export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
 export const RSVP_STATUSES = ["joining", "interested", "declined"] as const;
 export type RsvpStatus = (typeof RSVP_STATUSES)[number];
+
+export const userAccounts = pgTable(
+  "user_accounts",
+  {
+    deviceHash: text("device_hash").primaryKey(),
+    username: text("username").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("user_accounts_username_unique").on(t.username),
+    check(
+      "user_accounts_username_format",
+      sql`char_length(${t.username}) BETWEEN 3 AND 20 AND ${t.username} ~ ${sql.raw(`'${USERNAME_PATTERN.source}'`)}`,
+    ),
+  ],
+);
+
+export type UserAccount = typeof userAccounts.$inferSelect;
+export type NewUserAccount = typeof userAccounts.$inferInsert;

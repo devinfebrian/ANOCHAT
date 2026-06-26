@@ -18,9 +18,11 @@ type UsernameEditorProps = {
 };
 
 export function UsernameEditor({ open, onClose, containerRef }: UsernameEditorProps) {
-  const { username, setUsername, clear } = useUsername();
+  const { username, rename, remove } = useUsername();
   const [value, setValue] = useState(username ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputId = useId();
@@ -51,23 +53,47 @@ export function UsernameEditor({ open, onClose, containerRef }: UsernameEditorPr
 
   if (!open || !username) return null;
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const parsed = usernameSchema.safeParse(value);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Invalid username");
       return;
     }
-    if (parsed.data !== username) {
-      setUsername(parsed.data);
+    if (parsed.data === username) {
+      onClose();
+      return;
     }
-    onClose();
+    setError(null);
+    setPending(true);
+    try {
+      const result = await rename(parsed.data);
+      if (!result.ok) {
+        setError(result.error);
+      } else {
+        onClose();
+      }
+    } finally {
+      setPending(false);
+    }
   };
 
-  const handleRemove = () => {
-    clear();
-    onClose();
+  const handleRemove = async () => {
+    setError(null);
+    setRemoving(true);
+    try {
+      const result = await remove();
+      if (!result.ok) {
+        setError(result.error);
+      } else {
+        onClose();
+      }
+    } finally {
+      setRemoving(false);
+    }
   };
+
+  const busy = pending || removing;
 
   return (
     <div
@@ -83,7 +109,7 @@ export function UsernameEditor({ open, onClose, containerRef }: UsernameEditorPr
             <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
               {username}
             </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Local profile</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Anonymous account on this device</p>
           </div>
         </div>
         <label htmlFor={inputId} className="mt-4 block text-xs text-zinc-600 dark:text-zinc-400">
@@ -102,7 +128,8 @@ export function UsernameEditor({ open, onClose, containerRef }: UsernameEditorPr
           spellCheck={false}
           minLength={USERNAME_MIN}
           maxLength={USERNAME_MAX}
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
+          disabled={pending}
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
         />
         {error ? (
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
@@ -111,23 +138,26 @@ export function UsernameEditor({ open, onClose, containerRef }: UsernameEditorPr
           <button
             type="button"
             onClick={handleRemove}
-            className="text-xs text-zinc-500 hover:text-red-600 dark:text-zinc-400 dark:hover:text-red-400"
+            disabled={busy}
+            className="text-xs text-zinc-500 hover:text-red-600 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-red-400"
           >
-            Remove profile
+            {removing ? "Removing..." : "Remove account"}
           </button>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+              disabled={busy}
+              className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-900 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              disabled={busy}
+              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
-              Save
+              {pending ? "Saving..." : "Save"}
             </button>
           </div>
         </div>

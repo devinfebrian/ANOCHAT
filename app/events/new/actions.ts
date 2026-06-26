@@ -13,6 +13,7 @@ import {
 } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
 import { checkEventCreateRateLimit } from "@/lib/events/rate-limit";
+import { getOrCreateDeviceId } from "@/lib/profile/device";
 
 export type CreateEventState = {
   ok: boolean;
@@ -32,7 +33,9 @@ export async function createEvent(
     };
   }
 
-  const allowed = await checkEventCreateRateLimit(username);
+  const { hash: deviceHash } = await getOrCreateDeviceId();
+
+  const allowed = await checkEventCreateRateLimit(deviceHash);
   if (!allowed) {
     return {
       ok: false,
@@ -82,11 +85,17 @@ export async function createEvent(
           description: description || null,
           createdBy,
           managementTokenHash: tokenHash,
+          creatorDeviceHash: deviceHash,
         })
         .returning({ id: events.id, slug: events.slug });
       await tx
         .insert(eventAttendees)
-        .values({ eventId: event.id, username: createdBy, status: "joining" });
+        .values({
+          eventId: event.id,
+          username: createdBy,
+          status: "joining",
+          deviceHash,
+        });
       return event;
     });
 
