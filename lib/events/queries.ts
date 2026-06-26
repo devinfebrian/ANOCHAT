@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { cache } from "react";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
@@ -7,7 +7,11 @@ import { eventAttendees, events, type Event, type EventAttendee, type RsvpStatus
 export type EventListItem = Omit<Event, "cancelledAt" | "managementTokenHash"> & { attendeesCount: number };
 export type EventDetail = Event & { attendeesCount: number };
 
+export type EventCursor = { startsAt: Date; id: string };
+export type EventListPage = { items: EventListItem[]; nextCursor: EventCursor | null };
+
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const LIST_PAGE_SIZE = 20;
 
 export const getEventByIdentifier = cache(async function getEventByIdentifier(
   identifier: string,
@@ -47,7 +51,7 @@ export async function listEventAttendees(eventId: string): Promise<EventAttendee
     .orderBy(asc(eventAttendees.joinedAt));
 }
 
-export async function listUpcomingEvents(): Promise<EventListItem[]> {
+export async function listUpcomingEvents(cursor?: EventCursor, take = LIST_PAGE_SIZE): Promise<EventListPage> {
   await connection();
   const rows = await db
     .select({
@@ -67,18 +71,28 @@ export async function listUpcomingEvents(): Promise<EventListItem[]> {
       )`.as("attendees_count"),
     })
     .from(events)
-    .where(and(gt(events.startsAt, new Date()), isNull(events.cancelledAt)))
-    .orderBy(events.startsAt);
+    .where(
+      and(
+        gt(events.startsAt, new Date()),
+        isNull(events.cancelledAt),
+        cursor
+          ? or(gt(events.startsAt, cursor.startsAt), and(eq(events.startsAt, cursor.startsAt), gt(events.id, cursor.id)))
+          : undefined,
+      ),
+    )
+    .orderBy(asc(events.startsAt), asc(events.id))
+    .limit(take);
 
-  return rows;
+  const nextCursor = rows.length === take ? { startsAt: rows[rows.length - 1].startsAt, id: rows[rows.length - 1].id } : null;
+  return { items: rows, nextCursor };
 }
 
-export const isEventPast = cache(async function isEventPast(startsAt: Date): Promise<boolean> {
+export async function isEventPast(startsAt: Date): Promise<boolean> {
   await connection();
   return startsAt.getTime() <= Date.now();
-});
+}
 
-export async function listPastEvents(): Promise<EventListItem[]> {
+export async function listPastEvents(cursor?: EventCursor, take = LIST_PAGE_SIZE): Promise<EventListPage> {
   await connection();
   const rows = await db
     .select({
@@ -98,10 +112,20 @@ export async function listPastEvents(): Promise<EventListItem[]> {
       )`.as("attendees_count"),
     })
     .from(events)
-    .where(and(lt(events.startsAt, new Date()), isNull(events.cancelledAt)))
-    .orderBy(desc(events.startsAt));
+    .where(
+      and(
+        lt(events.startsAt, new Date()),
+        isNull(events.cancelledAt),
+        cursor
+          ? or(lt(events.startsAt, cursor.startsAt), and(eq(events.startsAt, cursor.startsAt), lt(events.id, cursor.id)))
+          : undefined,
+      ),
+    )
+    .orderBy(desc(events.startsAt), desc(events.id))
+    .limit(take);
 
-  return rows;
+  const nextCursor = rows.length === take ? { startsAt: rows[rows.length - 1].startsAt, id: rows[rows.length - 1].id } : null;
+  return { items: rows, nextCursor };
 }
 
 export type RsvpCounts = { joining: number; interested: number; declined: number };
