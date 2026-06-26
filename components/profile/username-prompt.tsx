@@ -19,9 +19,10 @@ export function UsernamePrompt({
   description = "Used to identify you across events on this device.",
   submitLabel = "Continue",
 }: UsernamePromptProps) {
-  const { setUsername } = useUsername();
+  const { claim } = useUsername();
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
 
@@ -46,14 +47,23 @@ export function UsernamePrompt({
     if (e.target === e.currentTarget && onCancel) onCancel();
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const parsed = usernameSchema.safeParse(value);
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Invalid username");
       return;
     }
-    setUsername(parsed.data);
+    setError(null);
+    setPending(true);
+    try {
+      const result = await claim(parsed.data);
+      if (!result.ok) {
+        setError(result.error);
+      }
+    } finally {
+      setPending(false);
+    }
   };
 
   const canCancel = Boolean(onCancel);
@@ -94,7 +104,8 @@ export function UsernamePrompt({
           minLength={USERNAME_MIN}
           maxLength={USERNAME_MAX}
           placeholder="e.g. ada_l"
-          className="mt-4 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
+          disabled={pending}
+          className="mt-4 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
         />
         {error ? (
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
@@ -104,16 +115,18 @@ export function UsernamePrompt({
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+              disabled={pending}
+              className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:text-zinc-900 disabled:opacity-60 dark:text-zinc-400 dark:hover:text-zinc-50"
             >
               Cancel
             </button>
           ) : null}
           <button
             type="submit"
-            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            disabled={pending}
+            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            {submitLabel}
+            {pending ? "Claiming..." : submitLabel}
           </button>
         </div>
       </form>

@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { eventAttendees, events, type Event, type EventAttendee, type RsvpStatus } from "@/lib/db/schema";
 
-export type EventListItem = Omit<Event, "cancelledAt" | "managementTokenHash"> & { attendeesCount: number };
+export type EventListItem = Omit<Event, "cancelledAt" | "managementTokenHash" | "creatorDeviceHash"> & { attendeesCount: number };
 export type EventDetail = Event & { attendeesCount: number };
 
 export type EventCursor = { startsAt: Date; id: string };
@@ -47,6 +47,7 @@ export const getEventByIdentifier = cache(async function getEventByIdentifier(
       createdAt: events.createdAt,
       cancelledAt: events.cancelledAt,
       managementTokenHash: events.managementTokenHash,
+      creatorDeviceHash: events.creatorDeviceHash,
       attendeesCount: sql<number>`(
         SELECT count(*)::int FROM ${eventAttendees} a WHERE a.event_id = ${events.id} AND a.status = 'joining'
       )`.as("attendees_count"),

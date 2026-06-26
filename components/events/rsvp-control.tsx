@@ -5,7 +5,12 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { RSVP_STATUSES, type RsvpStatus } from "@/lib/db/schema";
 import { RSVP_LIMITS } from "@/lib/events/schema";
-import { setRsvp, type SetRsvpState } from "@/app/events/[identifier]/actions";
+import {
+  removeRsvp,
+  setRsvp,
+  type RemoveRsvpState,
+  type SetRsvpState,
+} from "@/app/events/[identifier]/actions";
 
 type RsvpControlProps = {
   identifier: string;
@@ -30,6 +35,7 @@ const STATUS_STYLES: Record<RsvpStatus, string> = {
 };
 
 const initialState: SetRsvpState = { ok: false };
+const initialRemoveState: RemoveRsvpState = { ok: false };
 
 function RsvpButton({ status, current }: { status: RsvpStatus; current: RsvpStatus | null }) {
   const { pending } = useFormStatus();
@@ -48,8 +54,22 @@ function RsvpButton({ status, current }: { status: RsvpStatus; current: RsvpStat
   );
 }
 
+function RemoveRsvpButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-600 hover:border-red-300 hover:text-red-700 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-red-900 dark:hover:text-red-300"
+    >
+      {pending ? "Removing..." : "Remove my RSVP"}
+    </button>
+  );
+}
+
 export function RsvpControl({ identifier, currentStatus, currentNote, counts }: RsvpControlProps) {
   const [state, formAction] = useActionState(setRsvp, initialState);
+  const [removeState, removeAction] = useActionState(removeRsvp, initialRemoveState);
   const noteId = useId();
 
   return (
@@ -85,6 +105,17 @@ export function RsvpControl({ identifier, currentStatus, currentNote, counts }: 
           ))}
         </div>
       </form>
+
+      {currentStatus ? (
+        <form action={removeAction} className="mt-2 flex justify-end">
+          <input type="hidden" name="identifier" value={identifier} />
+          <RemoveRsvpButton />
+        </form>
+      ) : null}
+
+      {removeState.formError ? (
+        <p className="mt-1 text-xs text-red-600 dark:text-red-400">{removeState.formError}</p>
+      ) : null}
 
       <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
         {counts.joining} joining · {counts.interested} interested · {counts.declined} can&apos;t make it

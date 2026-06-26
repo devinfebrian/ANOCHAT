@@ -8,7 +8,12 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { syncUsernameCookie } from "./sync-action";
+import {
+  claimUsername,
+  removeAccount,
+  renameUsername,
+  type AccountResult,
+} from "./accounts";
 import { usernameSchema, type Username } from "./schema";
 import {
   clearUsername as clearStored,
@@ -20,8 +25,9 @@ import {
 type UsernameContextValue = {
   username: Username | null;
   ready: boolean;
-  setUsername: (value: string) => Username;
-  clear: () => void;
+  claim: (value: string) => Promise<AccountResult>;
+  rename: (value: string) => Promise<AccountResult>;
+  remove: () => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 const UsernameContext = createContext<UsernameContextValue | null>(null);
@@ -53,27 +59,50 @@ export function UsernameProvider({ children }: { children: ReactNode }) {
   const ready = snapshot !== HYDRATING;
   const username = ready ? snapshot : null;
 
-  const setUsername = useCallback((value: string): Username => {
-    const parsed = usernameSchema.safeParse(value);
-    if (!parsed.success) {
-      const message = parsed.error.issues[0]?.message ?? "Invalid username";
-      throw new Error(message);
-    }
-    saveStored(parsed.data);
-    void syncUsernameCookie(parsed.data);
-    emit();
-    return parsed.data;
-  }, []);
+  const claim = useCallback(
+    async (value: string): Promise<AccountResult> => {
+      const parsed = usernameSchema.safeParse(value);
+      if (!parsed.success) {
+        return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid username" };
+      }
+      const result = await claimUsername(parsed.data);
+      if (result.ok) {
+        saveStored(result.username);
+        emit();
+      }
+      return result;
+    },
+    [],
+  );
 
-  const clear = useCallback(() => {
-    clearStored();
-    void syncUsernameCookie(null);
-    emit();
+  const rename = useCallback(
+    async (value: string): Promise<AccountResult> => {
+      const parsed = usernameSchema.safeParse(value);
+      if (!parsed.success) {
+        return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid username" };
+      }
+      const result = await renameUsername(parsed.data);
+      if (result.ok) {
+        saveStored(result.username);
+        emit();
+      }
+      return result;
+    },
+    [],
+  );
+
+  const remove = useCallback(async () => {
+    const result = await removeAccount();
+    if (result.ok) {
+      clearStored();
+      emit();
+    }
+    return result;
   }, []);
 
   const value = useMemo<UsernameContextValue>(
-    () => ({ username, ready, setUsername, clear }),
-    [username, ready, setUsername, clear],
+    () => ({ username, ready, claim, rename, remove }),
+    [username, ready, claim, rename, remove],
   );
 
   return (
