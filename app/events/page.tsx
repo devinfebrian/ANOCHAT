@@ -1,11 +1,40 @@
 import Link from "next/link";
 import { EventCard } from "@/components/events/event-card";
-import { listPastEvents, listUpcomingEvents } from "@/lib/events/queries";
+import { encodeCursor, listPastEvents, listUpcomingEvents, parseCursor } from "@/lib/events/queries";
 
 export const metadata = { title: "Events · ANOCHAT" };
 
-export default async function EventsPage() {
-  const [upcoming, past] = await Promise.all([listUpcomingEvents(), listPastEvents()]);
+type Props = { searchParams: Promise<{ upcomingCursor?: string; pastCursor?: string }> };
+
+export default async function EventsPage({ searchParams }: Props) {
+  const { upcomingCursor: uRaw, pastCursor: pRaw } = await searchParams;
+  const upcomingCursor = parseCursor(uRaw);
+  const pastCursor = parseCursor(pRaw);
+
+  const now = new Date();
+  const [{ items: upcoming, nextCursor: nextUpcoming }, { items: past, nextCursor: nextPast }] = await Promise.all([
+    listUpcomingEvents(upcomingCursor, undefined, now),
+    listPastEvents(pastCursor, undefined, now),
+  ]);
+
+  const validURaw = upcomingCursor ? uRaw : undefined;
+  const validPRaw = pastCursor ? pRaw : undefined;
+
+  const upcomingMoreHref = nextUpcoming
+    ? `?${new URLSearchParams({
+        ...(validPRaw ? { pastCursor: validPRaw } : {}),
+        upcomingCursor: encodeCursor(nextUpcoming),
+      }).toString()}`
+    : null;
+  const pastMoreHref = nextPast
+    ? `?${new URLSearchParams({
+        ...(validURaw ? { upcomingCursor: validURaw } : {}),
+        pastCursor: encodeCursor(nextPast),
+      }).toString()}`
+    : null;
+
+  const isInitial = !upcomingCursor && !pastCursor;
+  const allEmpty = upcoming.length === 0 && past.length === 0;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -26,15 +55,19 @@ export default async function EventsPage() {
         </Link>
       </div>
 
-      {upcoming.length === 0 && past.length === 0 ? (
+      {allEmpty && isInitial ? (
         <div className="mt-10 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
           No events yet. Create the first one.
+        </div>
+      ) : allEmpty ? (
+        <div className="mt-10 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+          No more events to load.
         </div>
       ) : (
         <>
           {upcoming.length === 0 ? (
             <div className="mt-10 rounded-lg border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-              No upcoming events. Create one or browse past meetups below.
+              {upcomingCursor ? "No more upcoming events." : "No upcoming events. Create one or browse past meetups below."}
             </div>
           ) : (
             <ul className="mt-6 space-y-3">
@@ -43,6 +76,16 @@ export default async function EventsPage() {
               ))}
             </ul>
           )}
+          {upcomingMoreHref ? (
+            <div className="mt-4">
+              <Link
+                href={upcomingMoreHref}
+                className="text-sm font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
+              >
+                Load more upcoming
+              </Link>
+            </div>
+          ) : null}
 
           {past.length > 0 ? (
             <section className="mt-10">
@@ -54,6 +97,16 @@ export default async function EventsPage() {
                   <EventCard key={event.id} event={event} variant="past" />
                 ))}
               </ul>
+              {pastMoreHref ? (
+                <div className="mt-4">
+                  <Link
+                    href={pastMoreHref}
+                    className="text-sm font-medium text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
+                  >
+                    Load more past
+                  </Link>
+                </div>
+              ) : null}
             </section>
           ) : null}
         </>
