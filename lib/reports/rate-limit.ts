@@ -10,7 +10,7 @@ const MAX_REPORTS = 5;
 export const REPORT_RATE_LIMIT = { WINDOW_MINUTES, MAX_REPORTS } as const;
 
 export async function checkReportRateLimit(
-  deviceHash: string,
+  userId: string,
   targetType: ReportTargetType,
 ): Promise<boolean> {
   await connection();
@@ -20,7 +20,7 @@ export async function checkReportRateLimit(
     .from(reports)
     .where(
       and(
-        eq(reports.reporterDeviceHash, deviceHash),
+        eq(reports.reporterUserId, userId),
         eq(reports.targetType, targetType),
         gt(reports.createdAt, since),
       ),

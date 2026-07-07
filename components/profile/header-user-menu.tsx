@@ -1,56 +1,84 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Avatar } from "@/components/profile/avatar";
-import { UsernameEditor } from "@/components/profile/username-editor";
-import { UsernamePrompt } from "@/components/profile/username-prompt";
-import { useUsername } from "@/lib/profile/use-username";
+import Link from "next/link";
+import type { Profile } from "@/lib/db/schema";
 
-export function HeaderUserMenu() {
-  const { username, ready } = useUsername();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [promptOpen, setPromptOpen] = useState(false);
+type HeaderUserMenuProps = {
+  profile: Profile | null;
+};
+
+export function HeaderUserMenu({ profile }: HeaderUserMenuProps) {
+  const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  if (!ready) {
-    return <span className="h-8 w-8 rounded-full bg-zinc-200 dark:bg-zinc-800" />;
-  }
-
-  if (!username) {
+  if (!profile) {
     return (
-      <>
-        <button
-          type="button"
-          onClick={() => setPromptOpen(true)}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-        >
-          Set username
-        </button>
-        {promptOpen && (
-          <UsernamePrompt open onCancel={() => setPromptOpen(false)} />
-        )}
-      </>
+      <Link
+        href="/login"
+        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+      >
+        Sign in
+      </Link>
     );
   }
+
+  const initials = profile.displayName.slice(0, 2).toUpperCase();
+  const avatar = profile.avatarUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={profile.avatarUrl}
+      alt={profile.displayName}
+      width={32}
+      height={32}
+      className="h-8 w-8 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+    />
+  ) : (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+      {initials}
+    </span>
+  );
 
   return (
     <div ref={menuRef} className="relative">
       <button
         type="button"
-        onClick={() => setEditorOpen((v) => !v)}
-        aria-haspopup="dialog"
-        aria-expanded={editorOpen}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className="rounded-full focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:focus:ring-zinc-600"
       >
-        <Avatar username={username} size={32} />
+        {avatar}
       </button>
-      {editorOpen && (
-        <UsernameEditor
-          open
-          containerRef={menuRef}
-          onClose={() => setEditorOpen(false)}
-        />
-      )}
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-40 mt-2 w-48 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+        >
+          <Link
+            href={`/u/${profile.username}`}
+            onClick={() => setOpen(false)}
+            className="block rounded-md px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            @{profile.username}
+          </Link>
+          <Link
+            href="/settings"
+            onClick={() => setOpen(false)}
+            className="block rounded-md px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+          >
+            Settings
+          </Link>
+          <form action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="block w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }

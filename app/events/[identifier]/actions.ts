@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import {
   editEventSchema,
   eventFormValuesFromFormData,
@@ -18,13 +17,6 @@ import {
 } from "@/lib/events/intake";
 import { createEventIntakeContext } from "@/lib/events/server-context";
 
-function managerTokenFor(slug: string): Promise<string | null> {
-  return cookies().then((store) => {
-    const raw = store.get(`anochat_mgr_${slug}`)?.value;
-    return raw && raw.length > 0 ? raw : null;
-  });
-}
-
 export type SetRsvpState = {
   ok: boolean;
   formError?: string;
@@ -35,7 +27,7 @@ function mapRsvpError(error: IntakeError): SetRsvpState {
   if (error.type === "validation_error") {
     return { ok: false, noteError: error.fieldErrors.note?.[0], formError: undefined };
   }
-  if (error.type === "username_device_mismatch" || error.type === "form_error") {
+  if (error.type === "form_error") {
     return { ok: false, formError: error.message };
   }
   return mapFormError(error);
@@ -44,7 +36,7 @@ function mapRsvpError(error: IntakeError): SetRsvpState {
 function mapFormError(error: IntakeError): { ok: false; formError: string } {
   switch (error.type) {
     case "not_authenticated":
-      return { ok: false, formError: "Set a username before this action." };
+      return { ok: false, formError: "Pick a username before this action." };
     case "event_not_found":
       return { ok: false, formError: "Event not found." };
     case "event_cancelled":
@@ -145,8 +137,8 @@ export async function editEvent(
     return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  const ctx = await createEventIntakeContext({ managerToken: await managerTokenFor(identifier) });
-  const result = await editEventIntake(identifier, parsed.data, ctx);
+const ctx = await createEventIntakeContext();
+    const result = await editEventIntake(identifier, parsed.data, ctx);
   if (!result.ok) {
     return mapEditError(result.error);
   }
@@ -171,8 +163,8 @@ export async function cancelEvent(
     return { ok: false, formError: "Event not found." };
   }
 
-  const ctx = await createEventIntakeContext({ managerToken: await managerTokenFor(identifier) });
-  const result = await cancelEventIntake(identifier, ctx);
+const ctx = await createEventIntakeContext();
+    const result = await cancelEventIntake(identifier, ctx);
   if (!result.ok) {
     return mapFormError(result.error);
   }
