@@ -9,13 +9,8 @@ import { CancelEventButton } from "@/components/events/cancel-event-button";
 import { ReportEventButton } from "@/components/events/report-event-button";
 import { RequireUsername } from "@/components/events/require-username";
 import { Avatar } from "@/components/profile/avatar";
-import {
-  getEventByIdentifier,
-  getRsvpCounts,
-  getUserRsvp,
-  isEventPast,
-  listEventAttendees,
-} from "@/lib/events/queries";
+import { createDbEventStore } from "@/lib/events/store";
+import { isEventPast } from "@/lib/events/time";
 import { verifyEventManager } from "@/lib/events/management";
 import { getServerUsername } from "@/lib/profile/server";
 import type { RsvpStatus } from "@/lib/db/schema";
@@ -24,7 +19,8 @@ type Props = { params: Promise<{ identifier: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventByIdentifier(identifier);
   if (!event) return { title: "Event not found · ANOCHAT" };
   const title = `${event.title} · ANOCHAT`;
   const description = event.description ?? undefined;
@@ -55,20 +51,21 @@ const STATUS_GROUPS: { status: RsvpStatus; label: string }[] = [
 
 export default async function EventDetailPage({ params }: Props) {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventForManagement(identifier);
   if (!event) notFound();
 
   const [attendees, counts, username] = await Promise.all([
-    listEventAttendees(event.id),
-    getRsvpCounts(event.id),
+    store.listEventAttendees(event.id),
+    store.getRsvpCounts(event.id),
     getServerUsername(),
   ]);
-  const currentRsvp = username ? await getUserRsvp(event.id, username) : null;
+  const currentRsvp = username ? await store.getUserRsvp(event.id, username) : null;
   const currentStatus = currentRsvp?.status ?? null;
   const currentNote = currentRsvp?.note ?? null;
   const isManager = await verifyEventManager(event);
   const cancelled = Boolean(event.cancelledAt);
-  const isPast = await isEventPast(event.startsAt);
+  const isPast = isEventPast(event.startsAt);
   const totalAttendees = attendees.length;
 
   return (

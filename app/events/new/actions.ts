@@ -2,18 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { db } from "@/lib/db";
-import { eventAttendees, events } from "@/lib/db/schema";
 import { eventFormSchema, eventFormValuesFromFormData } from "@/lib/events/schema";
-import { zonedTimeToUtc } from "@/lib/events/time";
-import {
-  generateManagementToken,
-  hashManagementToken,
-  setManagerCookie,
-} from "@/lib/events/management";
-import { getServerUsername } from "@/lib/profile/server";
-import { checkEventCreateRateLimit } from "@/lib/events/rate-limit";
-import { getOrCreateDeviceId } from "@/lib/profile/device";
+import { createEvent as createEventIntake, type IntakeError } from "@/lib/events/intake";
+import { createEventIntakeContext } from "@/lib/events/server-context";
 
 export type CreateEventState = {
   ok: boolean;
@@ -21,94 +12,41 @@ export type CreateEventState = {
   formError?: string;
 };
 
+function mapError(error: IntakeError): CreateEventState {
+  switch (error.type) {
+    case "not_authenticated":
+      return { ok: false, formError: "Set a username before creating an event." };
+    case "rate_limited":
+      return { ok: false, formError: "Too many events created. Try again in a few minutes." };
+    case "validation_error":
+      return { ok: false, fieldErrors: error.fieldErrors };
+    case "event_full":
+      return { ok: false, formError: "Event is full." };
+    default:
+      return { ok: false, formError: "Could not create event." };
+  }
+}
+
 export async function createEvent(
   _prev: CreateEventState,
   formData: FormData,
 ): Promise<CreateEventState> {
-  const username = await getServerUsername();
-  if (!username) {
-    return {
-      ok: false,
-      formError: "Set a username before creating an event.",
-    };
+  const ctx = await createEventIntakeContext();
+  if (!ctx.user) {
+    return { ok: false, formError: "Set a username before creating an event." };
   }
 
-  const { hash: deviceHash } = await getOrCreateDeviceId();
-
-  const allowed = await checkEventCreateRateLimit(deviceHash);
-  if (!allowed) {
-    return {
-      ok: false,
-      formError: "Too many events created. Try again in a few minutes.",
-    };
-  }
-
-  const raw = { ...eventFormValuesFromFormData(formData), createdBy: username };
-  const parsed = eventFormSchema.safeParse(raw);
+  const raw = eventFormValuesFromFormData(formData);
+  const parsed = eventFormSchema.safeParse({ ...raw, createdBy: ctx.user });
   if (!parsed.success) {
-    return {
-      ok: false,
-      fieldErrors: parsed.error.flatten().fieldErrors,
-    };
+    return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  const { createdBy, mapUrl, description, startsAt, timezone, ...rest } = parsed.data;
-  const startsAtUtc = zonedTimeToUtc(startsAt, timezone);
-  if (startsAtUtc.getTime() <= Date.now()) {
-    return {
-      ok: false,
-      fieldErrors: { startsAt: ["Date and time must be in the future"] },
-    };
+  const result = await createEventIntake(parsed.data, ctx);
+  if (!result.ok) {
+    return mapError(result.error);
   }
 
-  const slug = `${rest.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "event"}-${Date.now().toString(36)}`;
-
-  const rawToken = generateManagementToken();
-  const tokenHash = hashManagementToken(rawToken);
-
-  try {
-    const inserted = await db.transaction(async (tx) => {
-      const [event] = await tx
-        .insert(events)
-        .values({
-          title: rest.title,
-          slug,
-          activityType: rest.activityType,
-          startsAt: startsAtUtc,
-          locationText: rest.locationText,
-          mapUrl: mapUrl || null,
-          maxParticipants: rest.maxParticipants,
-          description: description || null,
-          createdBy,
-          managementTokenHash: tokenHash,
-          creatorDeviceHash: deviceHash,
-        })
-        .returning({ id: events.id, slug: events.slug });
-      await tx
-        .insert(eventAttendees)
-        .values({
-          eventId: event.id,
-          username: createdBy,
-          status: "joining",
-          deviceHash,
-        });
-      return event;
-    });
-
-    await setManagerCookie(inserted.slug, rawToken);
-
-    revalidatePath("/events");
-    redirect(`/events/${inserted.slug}`);
-  } catch (error) {
-    if (error instanceof Error && (error as { code?: string }).code === "45000") {
-      return { ok: false, formError: "Event is full." };
-    }
-    throw error;
-  }
-
-  return { ok: true };
+  revalidatePath("/events");
+  redirect(`/events/${result.value.slug}`);
 }

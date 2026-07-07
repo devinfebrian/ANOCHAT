@@ -2,21 +2,23 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { EventForm } from "@/components/events/event-form";
 import { RequireUsername } from "@/components/events/require-username";
-import { getEventByIdentifier } from "@/lib/events/queries";
+import { createDbEventStore } from "@/lib/events/store";
 import { verifyEventManager } from "@/lib/events/management";
 
 type Props = { params: Promise<{ identifier: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventByIdentifier(identifier);
   if (!event) return { title: "Event not found · ANOCHAT" };
   return { title: `Edit ${event.title} · ANOCHAT`, robots: { index: false } };
 }
 
 export default async function EditEventPage({ params }: Props) {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventForManagement(identifier);
   if (!event) notFound();
   if (event.cancelledAt) notFound();
   const allowed = await verifyEventManager(event);

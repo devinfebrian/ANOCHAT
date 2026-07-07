@@ -1,22 +1,29 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, isNull, and } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { eventAttendees, events, reports } from "@/lib/db/schema";
+import { cookies } from "next/headers";
 import {
   editEventSchema,
   eventFormValuesFromFormData,
   rsvpNoteSchema,
   rsvpStatusSchema,
 } from "@/lib/events/schema";
-import { reportSchema } from "@/lib/reports/schema";
-import { checkReportRateLimit } from "@/lib/reports/rate-limit";
-import { zonedTimeToUtc } from "@/lib/events/time";
-import { getEventByIdentifier } from "@/lib/events/queries";
-import { clearManagerCookie, verifyEventManager } from "@/lib/events/management";
-import { getServerUsername } from "@/lib/profile/server";
-import { getOrCreateDeviceId } from "@/lib/profile/device";
+import {
+  cancelEvent as cancelEventIntake,
+  editEvent as editEventIntake,
+  removeRsvp as removeRsvpIntake,
+  reportEvent as reportEventIntake,
+  setRsvp as setRsvpIntake,
+  type IntakeError,
+} from "@/lib/events/intake";
+import { createEventIntakeContext } from "@/lib/events/server-context";
+
+function managerTokenFor(slug: string): Promise<string | null> {
+  return cookies().then((store) => {
+    const raw = store.get(`anochat_mgr_${slug}`)?.value;
+    return raw && raw.length > 0 ? raw : null;
+  });
+}
 
 export type SetRsvpState = {
   ok: boolean;
@@ -24,21 +31,50 @@ export type SetRsvpState = {
   noteError?: string;
 };
 
+function mapRsvpError(error: IntakeError): SetRsvpState {
+  if (error.type === "validation_error") {
+    return { ok: false, noteError: error.fieldErrors.note?.[0], formError: undefined };
+  }
+  if (error.type === "username_device_mismatch" || error.type === "form_error") {
+    return { ok: false, formError: error.message };
+  }
+  return mapFormError(error);
+}
+
+function mapFormError(error: IntakeError): { ok: false; formError: string } {
+  switch (error.type) {
+    case "not_authenticated":
+      return { ok: false, formError: "Set a username before this action." };
+    case "event_not_found":
+      return { ok: false, formError: "Event not found." };
+    case "event_cancelled":
+      return { ok: false, formError: "This event has been cancelled." };
+    case "not_manager":
+      return { ok: false, formError: "Only the creator can do this." };
+    case "rate_limited":
+      return { ok: false, formError: "Too many requests. Try again in a few minutes." };
+    case "event_full":
+      return { ok: false, formError: "Event is full." };
+    case "already_reported":
+      return { ok: false, formError: "You've already reported this event." };
+    case "form_error":
+      return { ok: false, formError: error.message };
+    case "validation_error":
+      return { ok: false, formError: Object.values(error.fieldErrors).flat()[0] ?? "Invalid input." };
+    default:
+      return { ok: false, formError: "Something went wrong." };
+  }
+}
+
 export async function setRsvp(
   _prev: SetRsvpState,
   formData: FormData,
 ): Promise<SetRsvpState> {
-  const username = await getServerUsername();
-  if (!username) {
-    return { ok: false, formError: "Set a username before RSVPing." };
-  }
-
   const identifier = String(formData.get("identifier") ?? "");
   const statusParsed = rsvpStatusSchema.safeParse(String(formData.get("status") ?? ""));
   if (!statusParsed.success || !identifier) {
     return { ok: false, formError: "Pick a valid RSVP status." };
   }
-  const status = statusParsed.data;
 
   const noteParsed = rsvpNoteSchema.safeParse(String(formData.get("note") ?? ""));
   if (!noteParsed.success) {
@@ -46,97 +82,16 @@ export async function setRsvp(
   }
   const note = noteParsed.data && noteParsed.data.trim() ? noteParsed.data.trim() : null;
 
-  const event = await getEventByIdentifier(identifier);
-  if (!event) {
-    return { ok: false, formError: "Event not found." };
-  }
-  if (event.cancelledAt) {
-    return { ok: false, formError: "This event has been cancelled." };
-  }
-  if (event.startsAt.getTime() <= Date.now() && status !== "declined") {
-    return { ok: false, formError: "Event has already started. RSVP closed." };
-  }
-
-  const { hash: deviceHash } = await getOrCreateDeviceId();
-
-  try {
-    await db.transaction(async (tx) => {
-      const existing = await tx
-        .select({
-          status: eventAttendees.status,
-          deviceHash: eventAttendees.deviceHash,
-        })
-        .from(eventAttendees)
-        .where(
-          and(
-            eq(eventAttendees.eventId, event.id),
-            eq(eventAttendees.username, username),
-          ),
-        )
-        .for("update")
-        .limit(1);
-
-      if (existing.length === 0) {
-        await tx.insert(eventAttendees).values({
-          eventId: event.id,
-          username,
-          status,
-          note,
-          deviceHash,
-        });
-        return;
-      }
-
-      const row = existing[0];
-      if (row.deviceHash !== deviceHash) {
-        throw new RsvpError(
-          "That username is already in use on another device. Pick a different name.",
-        );
-      }
-
-      const statusChanged = row.status !== status;
-      const update: {
-        status: typeof status;
-        note: typeof note;
-        deviceHash: string;
-        joinedAt?: Date;
-      } = {
-        status,
-        note,
-        deviceHash,
-      };
-      if (statusChanged) {
-        update.joinedAt = new Date();
-      }
-      await tx
-        .update(eventAttendees)
-        .set(update)
-        .where(
-          and(
-            eq(eventAttendees.eventId, event.id),
-            eq(eventAttendees.username, username),
-          ),
-        );
-    });
-  } catch (error) {
-    if (error instanceof RsvpError) {
-      return { ok: false, formError: error.message };
-    }
-    const code =
-      (error as { code?: string })?.code ??
-      (error as { cause?: { code?: string } })?.cause?.code;
-    if (code === "45000") {
-      return { ok: false, formError: "Event is full." };
-    }
-    throw error;
+  const ctx = await createEventIntakeContext();
+  const result = await setRsvpIntake(identifier, { status: statusParsed.data, note }, ctx);
+  if (!result.ok) {
+    return mapRsvpError(result.error);
   }
 
   revalidatePath("/events");
-  revalidatePath(`/events/${event.slug}`);
+  revalidatePath(`/events/${identifier}`);
   return { ok: true };
 }
-
-class RsvpError extends Error {}
 
 export type RemoveRsvpState = {
   ok: boolean;
@@ -152,26 +107,14 @@ export async function removeRsvp(
     return { ok: false, formError: "Event not found." };
   }
 
-  const event = await getEventByIdentifier(identifier);
-  if (!event) {
-    return { ok: false, formError: "Event not found." };
+  const ctx = await createEventIntakeContext();
+  const result = await removeRsvpIntake(identifier, ctx);
+  if (!result.ok) {
+    return mapFormError(result.error);
   }
-  if (event.cancelledAt) {
-    return { ok: false, formError: "Cancelled events are read-only." };
-  }
-
-  const { hash: deviceHash } = await getOrCreateDeviceId();
-  await db
-    .delete(eventAttendees)
-    .where(
-      and(
-        eq(eventAttendees.eventId, event.id),
-        eq(eventAttendees.deviceHash, deviceHash),
-      ),
-    );
 
   revalidatePath("/events");
-  revalidatePath(`/events/${event.slug}`);
+  revalidatePath(`/events/${identifier}`);
   return { ok: true };
 }
 
@@ -181,30 +124,20 @@ export type EditEventState = {
   formError?: string;
 };
 
+function mapEditError(error: IntakeError): EditEventState {
+  if (error.type === "validation_error") {
+    return { ok: false, fieldErrors: error.fieldErrors };
+  }
+  return mapFormError(error);
+}
+
 export async function editEvent(
   _prev: EditEventState,
   formData: FormData,
 ): Promise<EditEventState> {
-  const username = await getServerUsername();
-  if (!username) {
-    return { ok: false, formError: "Set a username before editing an event." };
-  }
-
   const identifier = String(formData.get("identifier") ?? "");
   if (!identifier) {
     return { ok: false, formError: "Event not found." };
-  }
-
-  const event = await getEventByIdentifier(identifier);
-  if (!event) {
-    return { ok: false, formError: "Event not found." };
-  }
-  if (event.cancelledAt) {
-    return { ok: false, formError: "Cancelled events can't be edited." };
-  }
-  const allowed = await verifyEventManager(event);
-  if (!allowed) {
-    return { ok: false, formError: "Only the creator can edit this event." };
   }
 
   const parsed = editEventSchema.safeParse(eventFormValuesFromFormData(formData));
@@ -212,33 +145,15 @@ export async function editEvent(
     return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   }
 
-  const { mapUrl, description, startsAt, timezone, ...rest } = parsed.data;
-  const startsAtUtc = zonedTimeToUtc(startsAt, timezone);
-  if (startsAtUtc.getTime() <= Date.now()) {
-    return { ok: false, fieldErrors: { startsAt: ["Date and time must be in the future"] } };
-  }
-
-  const updated = await db
-    .update(events)
-    .set({
-      title: rest.title,
-      activityType: rest.activityType,
-      startsAt: startsAtUtc,
-      locationText: rest.locationText,
-      mapUrl: mapUrl || null,
-      maxParticipants: rest.maxParticipants,
-      description: description || null,
-    })
-    .where(and(eq(events.id, event.id), isNull(events.cancelledAt)))
-    .returning({ id: events.id });
-
-  if (updated.length === 0) {
-    return { ok: false, formError: "Cancelled events can't be edited." };
+  const ctx = await createEventIntakeContext({ managerToken: await managerTokenFor(identifier) });
+  const result = await editEventIntake(identifier, parsed.data, ctx);
+  if (!result.ok) {
+    return mapEditError(result.error);
   }
 
   revalidatePath("/events");
-  revalidatePath(`/events/${event.slug}`);
-  revalidatePath(`/events/${event.slug}/edit`);
+  revalidatePath(`/events/${identifier}`);
+  revalidatePath(`/events/${identifier}/edit`);
   return { ok: true };
 }
 
@@ -256,33 +171,15 @@ export async function cancelEvent(
     return { ok: false, formError: "Event not found." };
   }
 
-  const event = await getEventByIdentifier(identifier);
-  if (!event) {
-    return { ok: false, formError: "Event not found." };
+  const ctx = await createEventIntakeContext({ managerToken: await managerTokenFor(identifier) });
+  const result = await cancelEventIntake(identifier, ctx);
+  if (!result.ok) {
+    return mapFormError(result.error);
   }
-  if (event.cancelledAt) {
-    return { ok: false, formError: "Event is already cancelled." };
-  }
-  const allowed = await verifyEventManager(event);
-  if (!allowed) {
-    return { ok: false, formError: "Only the creator can cancel this event." };
-  }
-
-  const updated = await db
-    .update(events)
-    .set({ cancelledAt: new Date() })
-    .where(and(eq(events.id, event.id), isNull(events.cancelledAt)))
-    .returning({ id: events.id });
-
-  if (updated.length === 0) {
-    return { ok: false, formError: "Event is already cancelled." };
-  }
-
-  await clearManagerCookie(event.slug);
 
   revalidatePath("/events");
-  revalidatePath(`/events/${event.slug}`);
-  revalidatePath(`/events/${event.slug}/edit`);
+  revalidatePath(`/events/${identifier}`);
+  revalidatePath(`/events/${identifier}/edit`);
   return { ok: true };
 }
 
@@ -292,73 +189,32 @@ export type ReportEventState = {
   reasonError?: string;
 };
 
+function mapReportError(error: IntakeError): ReportEventState {
+  if (error.type === "validation_error") {
+    return {
+      ok: false,
+      reasonError: error.fieldErrors.reason?.[0],
+      formError: error.fieldErrors.reason ? undefined : Object.values(error.fieldErrors).flat()[0],
+    };
+  }
+  const { formError } = mapFormError(error);
+  return { ok: false, formError };
+}
+
 export async function reportEvent(
   _prev: ReportEventState,
   formData: FormData,
 ): Promise<ReportEventState> {
-  const username = await getServerUsername();
-  if (!username) {
-    return { ok: false, formError: "Set a username before reporting." };
-  }
-
   const identifier = String(formData.get("identifier") ?? "");
   if (!identifier) {
     return { ok: false, formError: "Event not found." };
   }
 
-  const event = await getEventByIdentifier(identifier);
-  if (!event) {
-    return { ok: false, formError: "Event not found." };
-  }
-
-  if (username === event.createdBy) {
-    return { ok: false, formError: "You can't report your own event." };
-  }
-  if (event.cancelledAt) {
-    return { ok: false, formError: "This event has been cancelled." };
-  }
-
-  const { hash: deviceHash } = await getOrCreateDeviceId();
-
-  const allowed = await checkReportRateLimit(deviceHash, "event");
-  if (!allowed) {
-    return {
-      ok: false,
-      formError: "Too many reports submitted. Try again in a few minutes.",
-    };
-  }
-
-  const parsed = reportSchema.safeParse({
-    targetType: "event",
-    targetId: event.id,
-    reporterUsername: username,
-    reason: String(formData.get("reason") ?? ""),
-  });
-  if (!parsed.success) {
-    const reasonIssue = parsed.error.issues.find((i) => i.path[0] === "reason");
-    return {
-      ok: false,
-      reasonError: reasonIssue?.message,
-      formError: reasonIssue ? undefined : parsed.error.issues[0]?.message,
-    };
-  }
-
-  try {
-    await db.insert(reports).values({
-      targetType: parsed.data.targetType,
-      targetId: parsed.data.targetId,
-      reporterUsername: parsed.data.reporterUsername,
-      reporterDeviceHash: deviceHash,
-      reason: parsed.data.reason,
-    });
-  } catch (error) {
-    const code =
-      (error as { code?: string })?.code ??
-      (error as { cause?: { code?: string } })?.cause?.code;
-    if (code === "23505") {
-      return { ok: false, formError: "You've already reported this event." };
-    }
-    throw error;
+  const reason = String(formData.get("reason") ?? "");
+  const ctx = await createEventIntakeContext();
+  const result = await reportEventIntake(identifier, reason, ctx);
+  if (!result.ok) {
+    return mapReportError(result.error);
   }
 
   return { ok: true };
