@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { HeaderUserMenu } from "@/components/profile/header-user-menu";
+import { getServerProfile } from "@/lib/supabase/server";
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const profile = await getServerProfile();
+
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
@@ -20,7 +23,7 @@ export function SiteHeader() {
           </Link>
         </nav>
         <div className="flex items-center">
-          <HeaderUserMenu />
+          <HeaderUserMenu profile={profile} />
         </div>
       </div>
     </header>

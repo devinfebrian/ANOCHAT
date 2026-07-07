@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { EventCard } from "@/components/events/event-card";
-import { encodeCursor, listPastEvents, listUpcomingEvents, parseCursor } from "@/lib/events/queries";
+import { createDbEventStore, encodeCursor, parseCursor } from "@/lib/events/store";
 
 export const metadata = { title: "Events · ANOCHAT" };
 
@@ -11,10 +11,11 @@ export default async function EventsPage({ searchParams }: Props) {
   const upcomingCursor = parseCursor(uRaw);
   const pastCursor = parseCursor(pRaw);
 
+  const store = createDbEventStore();
   const now = new Date();
   const [{ items: upcoming, nextCursor: nextUpcoming }, { items: past, nextCursor: nextPast }] = await Promise.all([
-    listUpcomingEvents(upcomingCursor, undefined, now),
-    listPastEvents(pastCursor, undefined, now),
+    store.listUpcomingEvents(upcomingCursor, now),
+    store.listPastEvents(pastCursor, now),
   ]);
 
   const validURaw = upcomingCursor ? uRaw : undefined;

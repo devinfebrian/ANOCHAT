@@ -1,6 +1,10 @@
 // Convert a local wall-clock string (e.g. "2026-06-25T19:30") interpreted in the
 // given IANA timezone into a UTC Date. Naive: parse as if UTC, then slide by the
 // resolved offset so the displayed wall-clock matches the user's intent.
+export function isEventPast(startsAt: Date, now: number = Date.now()): boolean {
+  return startsAt.getTime() <= now;
+}
+
 export function zonedTimeToUtc(isoLocal: string, timeZone: string): Date {
   const asIfUtc = new Date(`${isoLocal}Z`);
   const fmt = new Intl.DateTimeFormat("en-US", {

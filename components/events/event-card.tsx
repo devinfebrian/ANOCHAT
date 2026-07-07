@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { EventTime } from "@/components/events/event-time";
-import type { EventListItem } from "@/lib/events/queries";
+import type { EventPublic } from "@/lib/events/store";
 
 type EventCardProps = {
-  event: EventListItem;
+  event: EventPublic;
   variant?: "upcoming" | "past";
 };
 

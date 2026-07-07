@@ -5,6 +5,13 @@ const envSchema = z.object({
     .string()
     .url("DATABASE_URL must be a valid Postgres connection string")
     .regex(/^postgres(ql)?:\/\//, "DATABASE_URL must start with postgresql:// or postgres://"),
+  NEXT_PUBLIC_SUPABASE_URL: z
+    .string()
+    .url("NEXT_PUBLIC_SUPABASE_URL must be a valid URL"),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z
+    .string()
+    .min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY is required"),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),

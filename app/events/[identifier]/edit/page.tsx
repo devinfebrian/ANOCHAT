@@ -1,26 +1,27 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { EventForm } from "@/components/events/event-form";
-import { RequireUsername } from "@/components/events/require-username";
-import { getEventByIdentifier } from "@/lib/events/queries";
-import { verifyEventManager } from "@/lib/events/management";
+import { createDbEventStore } from "@/lib/events/store";
+import { requireProfile } from "@/lib/supabase/server";
 
 type Props = { params: Promise<{ identifier: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventByIdentifier(identifier);
   if (!event) return { title: "Event not found · ANOCHAT" };
   return { title: `Edit ${event.title} · ANOCHAT`, robots: { index: false } };
 }
 
 export default async function EditEventPage({ params }: Props) {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const profile = await requireProfile();
+  const store = createDbEventStore();
+  const event = await store.findEventForManagement(identifier);
   if (!event) notFound();
   if (event.cancelledAt) notFound();
-  const allowed = await verifyEventManager(event);
-  if (!allowed) notFound();
+  if (event.createdByUserId !== profile.userId) notFound();
 
   const initial = {
     title: event.title,
@@ -41,9 +42,7 @@ export default async function EditEventPage({ params }: Props) {
         Update the details. The share link stays the same.
       </p>
       <div className="mt-6">
-        <RequireUsername>
-          <EventForm mode="edit" identifier={event.slug} initial={initial} />
-        </RequireUsername>
+        <EventForm mode="edit" identifier={event.slug} initial={initial} />
       </div>
     </div>
   );

@@ -7,24 +7,18 @@ import { CopyLinkButton } from "@/components/events/copy-link-button";
 import { RsvpControl } from "@/components/events/rsvp-control";
 import { CancelEventButton } from "@/components/events/cancel-event-button";
 import { ReportEventButton } from "@/components/events/report-event-button";
-import { RequireUsername } from "@/components/events/require-username";
 import { Avatar } from "@/components/profile/avatar";
-import {
-  getEventByIdentifier,
-  getRsvpCounts,
-  getUserRsvp,
-  isEventPast,
-  listEventAttendees,
-} from "@/lib/events/queries";
-import { verifyEventManager } from "@/lib/events/management";
-import { getServerUsername } from "@/lib/profile/server";
+import { createDbEventStore } from "@/lib/events/store";
+import { isEventPast } from "@/lib/events/time";
+import { getServerProfile } from "@/lib/supabase/server";
 import type { RsvpStatus } from "@/lib/db/schema";
 
 type Props = { params: Promise<{ identifier: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventByIdentifier(identifier);
   if (!event) return { title: "Event not found · ANOCHAT" };
   const title = `${event.title} · ANOCHAT`;
   const description = event.description ?? undefined;
@@ -55,20 +49,23 @@ const STATUS_GROUPS: { status: RsvpStatus; label: string }[] = [
 
 export default async function EventDetailPage({ params }: Props) {
   const { identifier } = await params;
-  const event = await getEventByIdentifier(identifier);
+  const store = createDbEventStore();
+  const event = await store.findEventByIdentifier(identifier);
   if (!event) notFound();
 
-  const [attendees, counts, username] = await Promise.all([
-    listEventAttendees(event.id),
-    getRsvpCounts(event.id),
-    getServerUsername(),
+  const profile = await getServerProfile();
+  const eventForAuth = await store.findEventForManagement(identifier);
+  const isManager = Boolean(profile && eventForAuth && eventForAuth.createdByUserId === profile.userId);
+
+  const [attendees, counts, currentRsvp] = await Promise.all([
+    store.listEventAttendees(event.id),
+    store.getRsvpCounts(event.id),
+    profile ? store.getUserRsvp(event.id, profile.userId) : Promise.resolve(null),
   ]);
-  const currentRsvp = username ? await getUserRsvp(event.id, username) : null;
   const currentStatus = currentRsvp?.status ?? null;
   const currentNote = currentRsvp?.note ?? null;
-  const isManager = await verifyEventManager(event);
   const cancelled = Boolean(event.cancelledAt);
-  const isPast = await isEventPast(event.startsAt);
+  const isPast = isEventPast(event.startsAt);
   const totalAttendees = attendees.length;
 
   return (
@@ -165,25 +162,21 @@ export default async function EventDetailPage({ params }: Props) {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">No one has RSVPed yet.</p>
           <p className="mt-1 text-base font-medium text-zinc-700 dark:text-zinc-300">Be the first to join.</p>
           <div className="mt-4">
-            <RequireUsername>
-              <RsvpControl
-                identifier={event.slug}
-                currentStatus={currentStatus}
-                currentNote={currentNote}
-                counts={counts}
-              />
-            </RequireUsername>
+            <RsvpControl
+              identifier={event.slug}
+              currentStatus={currentStatus}
+              currentNote={currentNote}
+              counts={counts}
+            />
           </div>
         </div>
       ) : (
-        <RequireUsername>
-          <RsvpControl
-            identifier={event.slug}
-            currentStatus={currentStatus}
-            currentNote={currentNote}
-            counts={counts}
-          />
-        </RequireUsername>
+        <RsvpControl
+          identifier={event.slug}
+          currentStatus={currentStatus}
+          currentNote={currentNote}
+          counts={counts}
+        />
       )}
 
       <div className="mt-3 space-y-6">
@@ -229,7 +222,7 @@ export default async function EventDetailPage({ params }: Props) {
         })}
       </div>
 
-      {username && username !== event.createdBy ? (
+      {profile && !isManager ? (
         <div className="mt-8 border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <ReportEventButton identifier={event.slug} />
         </div>
