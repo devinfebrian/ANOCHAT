@@ -253,6 +253,12 @@ export async function setRsvp(
     if (error instanceof RsvpDeviceMismatchError) {
       return err({ type: "username_device_mismatch", message: error.message });
     }
+    if (isDbError(error, "23505")) {
+      return err({
+        type: "username_device_mismatch",
+        message: "That username is already in use on another device. Pick a different name.",
+      });
+    }
     if (isDbError(error, "45000")) {
       return err({ type: "event_full" });
     }
@@ -266,7 +272,7 @@ export async function removeRsvp(
   identifier: string,
   ctx: EventIntakeContext,
 ): Promise<IntakeResult<void>> {
-  if (!ctx.deviceHash) {
+  if (!ctx.user || !ctx.deviceHash) {
     return err({ type: "not_authenticated" });
   }
 
@@ -307,27 +313,29 @@ export async function reportEvent(
     return err({ type: "rate_limited" });
   }
 
-  const parsed: ReportValues | null = reportSchema.safeParse({
+  const parsed = reportSchema.safeParse({
     targetType: "event",
     targetId: event.id,
     reporterUsername: ctx.user,
     reason,
-  }).data ?? null;
+  });
 
-  if (!parsed) {
+  if (!parsed.success) {
     return err({
       type: "validation_error",
-      fieldErrors: { reason: ["Reason is required and must be 280 characters or less"] },
+      fieldErrors: parsed.error.flatten().fieldErrors as Partial<Record<string, string[]>>,
     });
   }
 
+  const data: ReportValues = parsed.data;
+
   try {
     await ctx.store.insertReport({
-      targetType: parsed.targetType,
-      targetId: parsed.targetId,
-      reporterUsername: parsed.reporterUsername,
+      targetType: data.targetType,
+      targetId: data.targetId,
+      reporterUsername: data.reporterUsername,
       reporterDeviceHash: ctx.deviceHash,
-      reason: parsed.reason,
+      reason: data.reason,
     });
   } catch (error) {
     if (isDbError(error, "23505")) {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getServerUsername } from "@/lib/profile/server";
+import { createDbEventStore } from "@/lib/events/store";
 import type { Event } from "@/lib/db/schema";
 
 // Per-event management token. Raw token lives in an httpOnly cookie scoped to
@@ -56,4 +57,14 @@ export async function verifyEventManager(
   const submitted = Buffer.from(hashManagementToken(raw), "hex");
   const stored = Buffer.from(event.managementTokenHash, "hex");
   return submitted.length === stored.length && timingSafeEqual(submitted, stored);
+}
+
+// Public pages should never bind `managementTokenHash`/`creatorDeviceHash` to a
+// component-scoped value. This helper fetches the management projection
+// internally and returns only the boolean authorization result, so callers
+// like the public event detail page can stay on the public projection.
+export async function verifyEventManagerByIdentifier(identifier: string): Promise<boolean> {
+  const event = await createDbEventStore().findEventForManagement(identifier);
+  if (!event) return false;
+  return verifyEventManager(event);
 }
