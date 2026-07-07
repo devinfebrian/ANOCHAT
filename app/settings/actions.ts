@@ -3,14 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/supabase/server";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, createServiceSupabase } from "@/lib/supabase/server";
 import { renameUsername, updateProfile } from "@/lib/profile/queries";
-import { profileLinksSchema, usernameSchema, displayNameSchema, bioSchema } from "@/lib/profile/schema";
+
 
 export type SettingsState = { ok: boolean; error?: string; message?: string };
-
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
-const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export async function updateProfileAction(
   _prev: SettingsState,
@@ -59,31 +56,39 @@ export async function renameUsernameAction(
   redirect(`/settings`);
 }
 
-export async function uploadAvatarAction(
+export type SignedUploadState =
+  | { ok: true; signedUrl: string; path: string }
+  | { ok: false; error: string };
+
+export async function getAvatarUploadUrlAction(): Promise<SignedUploadState> {
+  const profile = await requireProfile();
+  const supabase = createServiceSupabase();
+  const path = `${profile.userId}/avatar`;
+
+  const { data, error } = await supabase.storage
+    .from("avatars")
+    .createSignedUploadUrl(path, { upsert: true });
+
+  if (error || !data?.signedUrl) {
+    return { ok: false, error: error?.message ?? "Could not create upload URL." };
+  }
+
+  return { ok: true, signedUrl: data.signedUrl, path: data.path };
+}
+
+export async function saveAvatarUrlAction(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
   const profile = await requireProfile();
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, error: "Choose an image file." };
-  }
-  if (file.size > MAX_AVATAR_BYTES) {
-    return { ok: false, error: "Image must be under 2 MB." };
-  }
-  if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
-    return { ok: false, error: "Image must be JPEG, PNG, or WebP." };
+  const path = String(formData.get("path") ?? "").trim();
+  const expectedPath = `${profile.userId}/avatar`;
+
+  if (path !== expectedPath) {
+    return { ok: false, error: "Invalid avatar path." };
   }
 
   const supabase = await getServerSupabase();
-  const path = `${profile.userId}/avatar`;
-  const { error: uploadError } = await supabase.storage
-    .from("avatars")
-    .upload(path, file, { contentType: file.type, upsert: true });
-  if (uploadError) {
-    return { ok: false, error: uploadError.message };
-  }
-
   const { data } = supabase.storage.from("avatars").getPublicUrl(path);
   if (!data.publicUrl) {
     return { ok: false, error: "Could not retrieve avatar URL." };
@@ -101,4 +106,3 @@ export async function uploadAvatarAction(
   revalidatePath("/settings");
   return { ok: true, message: "Avatar updated." };
 }
-

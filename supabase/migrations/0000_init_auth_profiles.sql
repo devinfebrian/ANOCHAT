@@ -143,14 +143,23 @@ ON CONFLICT ("id") DO NOTHING;--> statement-breakpoint
 
 -- Storage RLS: public bucket serves objects via public URL without a SELECT policy,
 -- so we omit the broad SELECT policy to prevent unknown clients from listing all files.
--- Only the owner may write/update/delete.
+-- Only the owner may write/update/delete. Path is `${userId}/avatar`; foldername[1] must equal auth uid.
 DROP POLICY IF EXISTS "avatars_public_read" ON "storage"."objects";--> statement-breakpoint
 DROP POLICY IF EXISTS "avatars_owner_write" ON "storage"."objects";--> statement-breakpoint
 CREATE POLICY "avatars_owner_write" ON "storage"."objects"
-  FOR INSERT WITH CHECK ("bucket_id" = 'avatars' AND "owner_id" = auth.uid()::text);--> statement-breakpoint
+  FOR INSERT WITH CHECK (
+    "bucket_id" = 'avatars'
+    AND (storage.foldername("name"))[1] = auth.uid()::text
+  );--> statement-breakpoint
 DROP POLICY IF EXISTS "avatars_owner_update" ON "storage"."objects";--> statement-breakpoint
 CREATE POLICY "avatars_owner_update" ON "storage"."objects"
-  FOR UPDATE USING ("bucket_id" = 'avatars' AND "owner_id" = auth.uid()::text);--> statement-breakpoint
+  FOR UPDATE USING (
+    "bucket_id" = 'avatars'
+    AND (storage.foldername("name"))[1] = auth.uid()::text
+  );--> statement-breakpoint
 DROP POLICY IF EXISTS "avatars_owner_delete" ON "storage"."objects";--> statement-breakpoint
 CREATE POLICY "avatars_owner_delete" ON "storage"."objects"
-  FOR DELETE USING ("bucket_id" = 'avatars' AND "owner_id" = auth.uid()::text);
+  FOR DELETE USING (
+    "bucket_id" = 'avatars'
+    AND (storage.foldername("name"))[1] = auth.uid()::text
+  );

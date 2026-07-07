@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState, startTransition } from "react";
 import type { Profile } from "@/lib/db/schema";
+import { compressAvatar } from "@/lib/profile/compress-avatar";
 import {
   renameUsernameAction,
   updateProfileAction,
-  uploadAvatarAction,
+  getAvatarUploadUrlAction,
+  saveAvatarUrlAction,
   type SettingsState,
 } from "./actions";
 
@@ -56,7 +58,70 @@ export function SettingsForm({ profile }: { profile: Profile }) {
 
   const [profileState, profileAction, profilePending] = useActionState(updateProfileAction, initialState);
   const [renameState, renameAction, renamePending] = useActionState(renameUsernameAction, initialState);
-  const [avatarState, avatarAction, avatarPending] = useActionState(uploadAvatarAction, initialState);
+  const [avatarState, saveAvatarAction, saveAvatarPending] = useActionState(saveAvatarUrlAction, initialState);
+
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarCompressError, setAvatarCompressError] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const avatarBusy = avatarUploading || saveAvatarPending;
+  const avatarError = avatarCompressError ?? (avatarState.error || null);
+
+  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setAvatarFile(null);
+      return;
+    }
+    setAvatarCompressError(null);
+    const result = await compressAvatar(file);
+    if (!result.ok) {
+      setAvatarCompressError(result.error);
+      setAvatarFile(null);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+      return;
+    }
+    setAvatarFile(result.file);
+  }
+
+  async function handleAvatarSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!avatarFile) return;
+
+    setAvatarUploading(true);
+    setAvatarCompressError(null);
+
+    const urlResult = await getAvatarUploadUrlAction();
+    if (!urlResult.ok) {
+      setAvatarCompressError(urlResult.error);
+      setAvatarUploading(false);
+      return;
+    }
+
+    const uploadRes = await fetch(urlResult.signedUrl, {
+      method: "PUT",
+      body: avatarFile,
+      headers: { "content-type": avatarFile.type },
+    });
+
+    if (!uploadRes.ok) {
+      const text = await uploadRes.text().catch(() => "Upload failed.");
+      setAvatarCompressError(text || "Upload failed.");
+      setAvatarUploading(false);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("path", urlResult.path);
+    startTransition(() => {
+      saveAvatarAction(formData);
+    });
+
+    setAvatarUploading(false);
+    setAvatarFile(null);
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
+  }
 
   return (
     <div className="space-y-10">
@@ -66,25 +131,27 @@ export function SettingsForm({ profile }: { profile: Profile }) {
         </h2>
         <div className="mt-3 flex items-center gap-4">
           <AvatarPreview profile={profile} />
-          <form action={avatarAction} className="flex-1">
+          <form onSubmit={handleAvatarSubmit} className="flex-1">
             <input
+              ref={avatarInputRef}
               type="file"
               name="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/png,image/jpeg"
               required
+              onChange={handleAvatarChange}
               className="block text-sm text-zinc-700 file:mr-3 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-3 file:py-1.5 file:text-sm file:text-zinc-700 dark:text-zinc-300 dark:file:border-zinc-700 dark:file:bg-zinc-900 dark:file:text-zinc-300"
             />
             <button
               type="submit"
-              disabled={avatarPending}
+              disabled={avatarBusy || !avatarFile}
               className="mt-3 rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              {avatarPending ? "Uploading…" : "Upload avatar"}
+              {avatarBusy ? "Uploading…" : "Upload avatar"}
             </button>
           </form>
         </div>
         <div className="mt-2">
-          <Banner state={avatarState} />
+          <Banner state={avatarError ? { ok: false, error: avatarError } : avatarState} />
         </div>
       </section>
 
