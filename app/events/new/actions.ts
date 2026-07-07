@@ -37,7 +37,7 @@ export async function createEvent(
   }
 
   const raw = eventFormValuesFromFormData(formData);
-  const parsed = eventFormSchema.safeParse({ ...raw, createdBy: ctx.user });
+  const parsed = eventFormSchema.safeParse({ ...raw, createdBy: ctx.user.username });
   if (!parsed.success) {
     return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   }
