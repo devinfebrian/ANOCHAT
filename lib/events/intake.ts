@@ -2,6 +2,7 @@ import type { RsvpStatus } from "@/lib/db/schema";
 import { reportSchema, type ReportValues } from "@/lib/reports/schema";
 import type { EventStore } from "./store";
 import type { EditEventValues, EventFormValues } from "./schema";
+import type { RateLimiter } from "./rate-limit";
 import { zonedTimeToUtc } from "./time";
 
 export type EventUser = { userId: string; username: string };
@@ -10,16 +11,7 @@ export type EventIntakeContext = {
   user: EventUser | null;
   now: Date;
   store: EventStore;
-  rateLimit: {
-    withEventCreate: <T>(
-      userId: string,
-      fn: (store: EventStore) => Promise<IntakeResult<T>>,
-    ) => Promise<IntakeResult<T>>;
-    withReport: <T>(
-      userId: string,
-      fn: (store: EventStore) => Promise<IntakeResult<T>>,
-    ) => Promise<IntakeResult<T>>;
-  };
+  rateLimit: RateLimiter;
   withStoreInTransaction: <T>(fn: (store: EventStore) => Promise<T>) => Promise<T>;
 };
 
