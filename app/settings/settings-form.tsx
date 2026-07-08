@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState, startTransition } from "react";
+import { useActionState, useRef, useState, startTransition, useMemo } from "react";
 import type { Profile } from "@/lib/db/schema";
 import { compressAvatar } from "@/lib/profile/compress-avatar";
 import {
@@ -53,8 +53,11 @@ function AvatarPreview({ profile }: { profile: Profile }) {
 }
 
 export function SettingsForm({ profile }: { profile: Profile }) {
-  const links = (profile.links ?? []).slice();
-  while (links.length < 5) links.push({ label: "", url: "" });
+  const links = useMemo(() => {
+    const list = (profile.links ?? []).slice();
+    while (list.length < 5) list.push({ label: "", url: "" });
+    return list;
+  }, [profile.links]);
 
   const [profileState, profileAction, profilePending] = useActionState(updateProfileAction, initialState);
   const [renameState, renameAction, renamePending] = useActionState(renameUsernameAction, initialState);

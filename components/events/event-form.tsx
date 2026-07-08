@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ACTIVITY_TYPES } from "@/lib/db/schema";
@@ -67,11 +67,11 @@ export function EventForm({ mode = "create", identifier, initial }: EventFormPro
   const action = mode === "edit" ? editEvent : createEvent;
   const [state, formAction] = useActionState(action, initialState);
   const fieldErrors = state.fieldErrors ?? {};
-  const startsAtRef = useRef<HTMLInputElement>(null);
+  const [startsAt, setStartsAt] = useState("");
 
   useEffect(() => {
-    if (mode === "edit" && initial?.startsAtUtc && startsAtRef.current) {
-      startsAtRef.current.value = toLocalDatetimeInput(initial.startsAtUtc);
+    if (mode === "edit" && initial?.startsAtUtc) {
+      setStartsAt(toLocalDatetimeInput(initial.startsAtUtc));
     }
   }, [mode, initial?.startsAtUtc]);
 
@@ -132,11 +132,12 @@ export function EventForm({ mode = "create", identifier, initial }: EventFormPro
             Date and time
           </label>
           <input
-            ref={startsAtRef}
             id="startsAt"
             name="startsAt"
             type="datetime-local"
             required
+            value={startsAt}
+            onChange={(e) => setStartsAt(e.target.value)}
             className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:border-zinc-300"
           />
           <FieldError errors={fieldErrors.startsAt} />
