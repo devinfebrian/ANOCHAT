@@ -47,11 +47,13 @@ const STATUS_GROUPS: { status: RsvpStatus; label: string }[] = [
 export default async function EventDetailPage({ params }: Props) {
   const { identifier } = await params;
   const store = createDbEventStore();
-  const event = await store.findEventByIdentifier(identifier);
+  const [event, profile, eventForAuth] = await Promise.all([
+    store.findEventByIdentifier(identifier),
+    getServerProfile(),
+    store.findEventForManagement(identifier),
+  ]);
   if (!event) notFound();
 
-  const profile = await getServerProfile();
-  const eventForAuth = await store.findEventForManagement(identifier);
   const isManager = Boolean(profile && eventForAuth && eventForAuth.createdByUserId === profile.userId);
 
   const [attendees, counts, currentRsvp] = await Promise.all([

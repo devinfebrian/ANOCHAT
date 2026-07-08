@@ -2,10 +2,14 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import type { Profile } from "@/lib/db/schema";
+type HeaderProfile = {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+};
 
 type HeaderUserMenuProps = {
-  profile: Profile | null;
+  profile: HeaderProfile | null;
 };
 
 export function HeaderUserMenu({ profile }: HeaderUserMenuProps) {
