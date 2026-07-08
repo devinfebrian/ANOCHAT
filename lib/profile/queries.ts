@@ -1,6 +1,13 @@
 import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { profiles, usernameReservations, type Profile, type LinkEntry } from "@/lib/db/schema";
+import {
+  profiles,
+  usernameReservations,
+  events,
+  eventAttendees,
+  type Profile,
+  type LinkEntry,
+} from "@/lib/db/schema";
 import { bioSchema, displayNameSchema, profileLinksSchema, usernameSchema } from "./schema";
 
 export const RENAME_COOLDOWN_DAYS = 7;
@@ -134,6 +141,14 @@ export async function renameUsername(profile: Profile, newName: string): Promise
         .returning();
       if (!row) throw new Error("Profile not found");
       await tx
+        .update(events)
+        .set({ createdBy: nameParsed.data })
+        .where(eq(events.createdBy, profile.username));
+      await tx
+        .update(eventAttendees)
+        .set({ username: nameParsed.data })
+        .where(eq(eventAttendees.username, profile.username));
+      await tx
         .insert(usernameReservations)
         .values({
           username: profile.username,
@@ -204,10 +219,10 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
     (error as { code?: string })?.code ??
     (error as { cause?: { code?: string } })?.cause?.code;
   if (code !== "23505") return false;
-  const detail = String(
-    (error as { detail?: string })?.detail ??
-      (error as { cause?: { detail?: string } })?.cause?.detail ??
-      "",
-  );
-  return detail.includes(constraint) || detail.includes("profiles_username") || detail.includes("username");
+  const errConstraint =
+    (error as { constraint?: string })?.constraint ??
+    (error as { constraint_name?: string })?.constraint_name ??
+    (error as { cause?: { constraint?: string } })?.cause?.constraint ??
+    (error as { cause?: { constraint_name?: string } })?.cause?.constraint_name;
+  return errConstraint === constraint;
 }

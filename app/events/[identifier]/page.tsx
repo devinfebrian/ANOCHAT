@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
 import type { Metadata } from "next";
+import { getAppUrl } from "@/lib/auth/origin";
 import { EventTime } from "@/components/events/event-time";
 import { CopyLinkButton } from "@/components/events/copy-link-button";
 import { RsvpControl } from "@/components/events/rsvp-control";
@@ -22,10 +22,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!event) return { title: "Event not found · ANOCHAT" };
   const title = `${event.title} · ANOCHAT`;
   const description = event.description ?? undefined;
-  const h = await headers();
-  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0].trim();
-  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "localhost").split(",")[0].trim();
-  const url = `${proto}://${host}/events/${event.slug}`;
+  const url = `${getAppUrl()}/events/${event.slug}`;
   return {
     title,
     description,

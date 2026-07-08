@@ -1,7 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { getAppUrl } from "@/lib/auth/origin";
+import { safeRedirect } from "@/lib/auth/redirect";
 import { getServerSupabase } from "@/lib/supabase/server";
 
 export type RequestMagicLinkState = {
@@ -15,16 +16,12 @@ export async function requestMagicLink(
   formData: FormData,
 ): Promise<RequestMagicLinkState> {
   const email = String(formData.get("email") ?? "").trim();
-  const redirectTo = String(formData.get("redirect") ?? "").trim() || "/events";
+  const redirectTo = safeRedirect(String(formData.get("redirect") ?? ""));
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { ok: false, error: "Enter a valid email address.", email };
   }
 
-  const h = await headers();
-  const proto = (h.get("x-forwarded-proto") ?? "https").split(",")[0].trim();
-  const host = (h.get("x-forwarded-host") ?? h.get("host") ?? "localhost").split(",")[0].trim();
-  const origin = `${proto}://${host}`;
-  const confirmUrl = new URL("/auth/confirm", origin);
+  const confirmUrl = new URL("/auth/confirm", getAppUrl());
   confirmUrl.searchParams.set("redirect", redirectTo);
 
   const supabase = await getServerSupabase();
