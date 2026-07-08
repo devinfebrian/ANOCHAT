@@ -8,6 +8,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 export type RequestMagicLinkState = {
   ok: boolean;
   error?: string;
+  errorCode?: string;
   email?: string;
 };
 
@@ -31,7 +32,7 @@ export async function requestMagicLink(
   });
 
   if (error) {
-    return { ok: false, error: error.message, email };
+    return { ok: false, error: error.message, errorCode: error.code, email };
   }
 
   redirect(`/login?sent=1&email=${encodeURIComponent(email)}`);
