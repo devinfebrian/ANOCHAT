@@ -54,6 +54,9 @@ export interface EventStore {
   deleteRsvpByUser(eventId: string, userId: string): Promise<void>;
 
   insertReport(report: NewReport): Promise<void>;
+
+  updateEventsCreatedBy(oldUsername: string, newUsername: string): Promise<void>;
+  updateAttendeeUsernames(oldUsername: string, newUsername: string): Promise<void>;
 }
 
 export function parseCursor(raw: string | undefined): EventCursor | undefined {
@@ -282,6 +285,14 @@ export function createDbEventStore(client: DbClient = db): EventStore {
 
     async insertReport(report: NewReport): Promise<void> {
       await client.insert(reports).values(report);
+    },
+
+    async updateEventsCreatedBy(oldUsername: string, newUsername: string): Promise<void> {
+      await client.update(events).set({ createdBy: newUsername }).where(eq(events.createdBy, oldUsername));
+    },
+
+    async updateAttendeeUsernames(oldUsername: string, newUsername: string): Promise<void> {
+      await client.update(eventAttendees).set({ username: newUsername }).where(eq(eventAttendees.username, oldUsername));
     },
   };
 }
