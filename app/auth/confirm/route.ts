@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeRedirect } from "@/lib/auth/redirect";
 import { env } from "@/lib/env";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const redirectTarget = url.searchParams.get("redirect") ?? "/claim-username";
+  const redirectTarget = safeRedirect(url.searchParams.get("redirect"), "/claim-username");
 
   if (!code) {
     return NextResponse.redirect(new URL("/login?error=auth_failed", url.origin));
