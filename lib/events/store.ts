@@ -11,6 +11,7 @@ import {
   type NewEventAttendee,
   type NewReport,
   type RsvpStatus,
+  type ReportTargetType,
 } from "@/lib/db/schema";
 
 export type EventPublic = Omit<Event, "createdByUserId"> & {
@@ -54,6 +55,9 @@ export interface EventStore {
   deleteRsvpByUser(eventId: string, userId: string): Promise<void>;
 
   insertReport(report: NewReport): Promise<void>;
+
+  countEventsCreatedByUserSince(userId: string, since: Date): Promise<number>;
+  countReportsByUserSince(userId: string, targetType: ReportTargetType, since: Date): Promise<number>;
 
   updateEventsCreatedBy(oldUsername: string, newUsername: string): Promise<void>;
   updateAttendeeUsernames(oldUsername: string, newUsername: string): Promise<void>;
@@ -285,6 +289,32 @@ export function createDbEventStore(client: DbClient = db): EventStore {
 
     async insertReport(report: NewReport): Promise<void> {
       await client.insert(reports).values(report);
+    },
+
+    async countEventsCreatedByUserSince(userId: string, since: Date): Promise<number> {
+      const rows = await client
+        .select({ count: sql<number>`count(*)::int` })
+        .from(events)
+        .where(and(eq(events.createdByUserId, userId), gt(events.createdAt, since)));
+      return rows[0]?.count ?? 0;
+    },
+
+    async countReportsByUserSince(
+      userId: string,
+      targetType: ReportTargetType,
+      since: Date,
+    ): Promise<number> {
+      const rows = await client
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reports)
+        .where(
+          and(
+            eq(reports.reporterUserId, userId),
+            eq(reports.targetType, targetType),
+            gt(reports.createdAt, since),
+          ),
+        );
+      return rows[0]?.count ?? 0;
     },
 
     async updateEventsCreatedBy(oldUsername: string, newUsername: string): Promise<void> {

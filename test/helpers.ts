@@ -47,6 +47,18 @@ const SETUP_DDL = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "event_attendees_event_user_active_unique"
     ON "event_attendees" ("event_id","user_id") WHERE "event_attendees"."status" <> 'declined'`,
+  `CREATE TABLE IF NOT EXISTS "reports" (
+    "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+    "target_type" text NOT NULL,
+    "target_id" uuid NOT NULL,
+    "reporter_username" text NOT NULL,
+    "reporter_user_id" uuid NOT NULL,
+    "reason" text NOT NULL,
+    "status" text DEFAULT 'open' NOT NULL,
+    "created_at" timestamptz DEFAULT now() NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "reports_target_reporter_unique"
+    ON "reports" ("target_id","reporter_user_id")`,
 ];
 
 export async function setupSchema(): Promise<void> {
@@ -58,7 +70,7 @@ export async function setupSchema(): Promise<void> {
 export async function resetTables(): Promise<void> {
   await db.execute(
     sql.raw(
-      `TRUNCATE TABLE "event_attendees", "events", "username_reservations", "profiles" CASCADE`,
+      `TRUNCATE TABLE "reports", "event_attendees", "events", "username_reservations", "profiles" CASCADE`,
     ),
   );
 }
@@ -99,6 +111,17 @@ export async function seedAttendee(
   await db.execute(
     sql`INSERT INTO "event_attendees" ("event_id", "username", "status", "user_id")
         VALUES (${eventId}, ${username}, 'joining', ${userId})`,
+  );
+}
+
+export async function seedReport(
+  reporterUserId: string,
+  reporterUsername: string,
+  targetId: string,
+): Promise<void> {
+  await db.execute(
+    sql`INSERT INTO "reports" ("target_type", "target_id", "reporter_username", "reporter_user_id", "reason")
+        VALUES ('event', ${targetId}, ${reporterUsername}, ${reporterUserId}, 'spam')`,
   );
 }
 

@@ -13,7 +13,8 @@ Terms used by the codebase and architecture reviews.
 - **Username** — a public, device-bound display name. Must match `USERNAME_PATTERN`.
 - **Device** — an anonymous browser identity represented by a raw token in an httpOnly cookie and a SHA-256 device hash used server-side.
 - **Identity session** — the combination of Device, Username (via `user_accounts`), and client-side storage that represents the current user.
-- **Rate limit** — a sliding-window count of actions (event creation, reporting) per Device.
+- **Rate limit** — a sliding-window count of actions (event creation, reporting) per user.
+- **Rate limiter adapter** — the seam that owns the sliding-window policy, advisory locking, and per-action caps behind Event intake. Production implementation uses a Postgres transaction with `pg_advisory_xact_lock`; tests can substitute a counter-only implementation.
 - **EventStore adapter** — the persistence seam behind Event intake. Production implementation uses Drizzle; tests can use an in-memory substitute.
 - **Event intake context** — the request-scoped dependencies passed into Event intake: current Username, Device hash, time, EventStore adapter, manager-cookie adapter, and rate-limit checks.
 - **Event intake result** — a discriminated result type carrying either a success value or a domain error such as `not_authenticated`, `event_full`, or `not_manager`.
