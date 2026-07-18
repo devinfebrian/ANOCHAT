@@ -1,26 +1,49 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
-const isPublicRoute = createRouteMatcher(["/login(.*)", "/sign-up(.*)", "/api/health"]);
+export default async function proxy(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request });
 
-export default clerkMiddleware(async (auth, req) => {
-  const { userId } = await auth();
-  const path = req.nextUrl.pathname;
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options),
+          );
+        },
+      },
+    },
+  );
 
-  if (!userId && !isPublicRoute(req)) {
-    const url = req.nextUrl.clone();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const path = request.nextUrl.pathname;
+  const isPublic = path === "/login" || path.startsWith("/auth");
+
+  if (!user && !isPublic) {
+    const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("redirect", path + req.nextUrl.search);
+    url.searchParams.set("redirect", path + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
 
-  if (userId && (path === "/login" || path === "/")) {
-    const url = req.nextUrl.clone();
+  if (user && (path === "/login" || path === "/")) {
+    const url = request.nextUrl.clone();
     url.pathname = "/events";
     url.search = "";
     return NextResponse.redirect(url);
   }
-});
+
+  return supabaseResponse;
+}
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
