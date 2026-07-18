@@ -12,7 +12,7 @@ import {
   bioSchema,
   profileLinksSchema,
 } from "./schema";
-import { createServiceSupabase, getServerSupabase } from "@/lib/supabase/server";
+import { createServiceSupabase } from "@/lib/supabase/server";
 import { createDbEventStore } from "@/lib/events/store";
 
 export const RENAME_COOLDOWN_DAYS = 7;
@@ -225,7 +225,7 @@ export function createDbProfileStore(): ProfileStore {
     },
 
     async getAvatarPublicUrl(path: string): Promise<string> {
-      const supabase = await getServerSupabase();
+      const supabase = await createServiceSupabase();
       const { data } = supabase.storage.from("avatars").getPublicUrl(path);
       if (!data.publicUrl) {
         throw new Error("Could not retrieve avatar URL.");

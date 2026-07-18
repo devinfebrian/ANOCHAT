@@ -3,10 +3,9 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { SignOutButton } from "@clerk/nextjs";
-import type { Profile } from "@/lib/db/schema";
 
 type HeaderUserMenuProps = {
-  profile: HeaderProfile | null;
+  profile: { username: string; displayName: string; avatarUrl: string | null } | null;
 };
 
 export function HeaderUserMenu({ profile }: HeaderUserMenuProps) {
