@@ -2,17 +2,41 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireProfile } from "@/lib/supabase/server";
-import { createServiceSupabase } from "@/lib/supabase/server";
-import { renameUsername, updateProfile } from "@/lib/profile/queries";
+import {
+  updateProfile as updateProfileIntake,
+  renameUsername as renameUsernameIntake,
+  prepareAvatarUpload,
+  saveAvatarUrl,
+  type ProfileIntakeError,
+} from "@/lib/profile/intake";
+import { createProfileIntakeContext } from "@/lib/profile/server-context";
 
 export type SettingsState = { ok: boolean; error?: string; message?: string };
+
+function mapError(error: ProfileIntakeError): string {
+  switch (error.type) {
+    case "not_authenticated":
+      return "Pick a username before updating your profile.";
+    case "profile_not_found":
+      return "Profile not found.";
+    case "username_taken":
+      return "That username is already taken.";
+    case "invalid_username":
+      return error.message;
+    case "invalid_display_name":
+      return error.message;
+    case "invalid_avatar_path":
+      return "Invalid avatar path.";
+    case "form_error":
+      return error.message;
+  }
+}
 
 export async function updateProfileAction(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
-  const profile = await requireProfile();
+  const ctx = await createProfileIntakeContext();
 
   const displayName = String(formData.get("displayName") ?? "").trim();
   const bio = String(formData.get("bio") ?? "").trim();
@@ -22,17 +46,12 @@ export async function updateProfileAction(
     .map((label, i) => ({ label: label.trim(), url: urls[i]?.trim() ?? "" }))
     .filter((l) => l.label.length > 0 || l.url.length > 0);
 
-  try {
-    await updateProfile(profile.userId, {
-      displayName,
-      bio: bio.length > 0 ? bio : null,
-      links,
-    });
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Could not save profile." };
+  const result = await updateProfileIntake({ displayName, bio, links }, ctx);
+  if (!result.ok) {
+    return { ok: false, error: mapError(result.error) };
   }
 
-  revalidatePath(`/u/${profile.username}`);
+  revalidatePath(`/u/${result.value.username}`);
   revalidatePath("/settings");
   return { ok: true, message: "Profile saved." };
 }
@@ -41,16 +60,18 @@ export async function renameUsernameAction(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
-  const profile = await requireProfile();
+  const ctx = await createProfileIntakeContext();
   const newName = String(formData.get("username") ?? "").trim();
 
-  const result = await renameUsername(profile, newName);
+  const result = await renameUsernameIntake(newName, ctx);
   if (!result.ok) {
-    return { ok: false, error: result.error };
+    return { ok: false, error: mapError(result.error) };
   }
 
-  revalidatePath(`/u/${result.profile.username}`);
-  revalidatePath(`/u/${profile.username}`);
+  revalidatePath(`/u/${result.value.username}`);
+  if (ctx.profile && ctx.profile.username !== result.value.username) {
+    revalidatePath(`/u/${ctx.profile.username}`);
+  }
   revalidatePath("/settings");
   redirect(`/settings`);
 }
@@ -60,48 +81,29 @@ export type SignedUploadState =
   | { ok: false; error: string };
 
 export async function getAvatarUploadUrlAction(): Promise<SignedUploadState> {
-  const profile = await requireProfile();
-  const supabase = createServiceSupabase();
-  const path = `${profile.userId}/avatar`;
+  const ctx = await createProfileIntakeContext();
 
-  const { data, error } = await supabase.storage
-    .from("avatars")
-    .createSignedUploadUrl(path, { upsert: true });
-
-  if (error || !data?.signedUrl) {
-    return { ok: false, error: error?.message ?? "Could not create upload URL." };
+  const result = await prepareAvatarUpload(ctx);
+  if (!result.ok) {
+    return { ok: false, error: mapError(result.error) };
   }
 
-  return { ok: true, signedUrl: data.signedUrl, path: data.path };
+  return { ok: true, signedUrl: result.value.signedUrl, path: result.value.path };
 }
 
 export async function saveAvatarUrlAction(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
-  const profile = await requireProfile();
+  const ctx = await createProfileIntakeContext();
   const path = String(formData.get("path") ?? "").trim();
-  const expectedPath = `${profile.userId}/avatar`;
 
-  if (path !== expectedPath) {
-    return { ok: false, error: "Invalid avatar path." };
+  const result = await saveAvatarUrl(path, ctx);
+  if (!result.ok) {
+    return { ok: false, error: mapError(result.error) };
   }
 
-  const supabase = createServiceSupabase();
-  const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-  if (!data.publicUrl) {
-    return { ok: false, error: "Could not retrieve avatar URL." };
-  }
-
-  // Cache-bust the public URL so the new image shows immediately.
-  const avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
-  try {
-    await updateProfile(profile.userId, { avatarUrl });
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Could not save avatar." };
-  }
-
-  revalidatePath(`/u/${profile.username}`);
+  revalidatePath(`/u/${result.value.username}`);
   revalidatePath("/settings");
   return { ok: true, message: "Avatar updated." };
 }

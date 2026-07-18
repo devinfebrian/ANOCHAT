@@ -4,6 +4,9 @@ import { getServerProfile } from "@/lib/supabase/server";
 
 export async function SiteHeader() {
   const profile = await getServerProfile();
+  const headerProfile = profile
+    ? { username: profile.username, displayName: profile.displayName, avatarUrl: profile.avatarUrl }
+    : null;
 
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800">
@@ -23,7 +26,7 @@ export async function SiteHeader() {
           </Link>
         </nav>
         <div className="flex items-center">
-          <HeaderUserMenu profile={profile} />
+          <HeaderUserMenu profile={headerProfile} />
         </div>
       </div>
     </header>

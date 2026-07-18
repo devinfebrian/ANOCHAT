@@ -6,7 +6,7 @@ import { SignOutButton } from "@clerk/nextjs";
 import type { Profile } from "@/lib/db/schema";
 
 type HeaderUserMenuProps = {
-  profile: Profile | null;
+  profile: HeaderProfile | null;
 };
 
 export function HeaderUserMenu({ profile }: HeaderUserMenuProps) {

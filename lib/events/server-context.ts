@@ -1,8 +1,7 @@
 import { db } from "@/lib/db";
 import { getServerSession, getServerProfile } from "@/lib/supabase/server";
 import type { EventUser } from "./intake";
-import { withReportRateLimit } from "@/lib/reports/rate-limit";
-import { withEventCreateRateLimit } from "./rate-limit";
+import { createDbRateLimiter } from "./rate-limit";
 import { createDbEventStore, type EventStore } from "./store";
 import type { EventIntakeContext } from "./intake";
 
@@ -17,11 +16,7 @@ export async function createEventIntakeContext(): Promise<EventIntakeContext> {
     user,
     now: new Date(),
     store: createDbEventStore(),
-    rateLimit: {
-      withEventCreate: withEventCreateRateLimit,
-      withReport: (userId: string, fn) =>
-        withReportRateLimit(userId, "event", fn),
-    },
+    rateLimit: createDbRateLimiter(),
     withStoreInTransaction: async <T>(fn: (store: EventStore) => Promise<T>) =>
       db.transaction(async (tx) => fn(createDbEventStore(tx))),
   };
