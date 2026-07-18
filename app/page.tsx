@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center px-4 py-24 text-center">
       <h1 className="text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        ANOCHAT
+        WALLX
       </h1>
       <p className="mt-3 max-w-md text-lg text-zinc-600 dark:text-zinc-400">
         Event RSVP platform. Foundation ready.

@@ -3,9 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/supabase/server";
-import { getServerSupabase, createServiceSupabase } from "@/lib/supabase/server";
+import { createServiceSupabase } from "@/lib/supabase/server";
 import { renameUsername, updateProfile } from "@/lib/profile/queries";
-
 
 export type SettingsState = { ok: boolean; error?: string; message?: string };
 
@@ -88,7 +87,7 @@ export async function saveAvatarUrlAction(
     return { ok: false, error: "Invalid avatar path." };
   }
 
-  const supabase = await getServerSupabase();
+  const supabase = createServiceSupabase();
   const { data } = supabase.storage.from("avatars").getPublicUrl(path);
   if (!data.publicUrl) {
     return { ok: false, error: "Could not retrieve avatar URL." };

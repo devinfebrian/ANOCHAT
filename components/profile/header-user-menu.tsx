@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { SignOutButton } from "@clerk/nextjs";
 import type { Profile } from "@/lib/db/schema";
 
 type HeaderUserMenuProps = {
@@ -69,14 +70,14 @@ export function HeaderUserMenu({ profile }: HeaderUserMenuProps) {
           >
             Settings
           </Link>
-          <form action="/auth/signout" method="post">
+          <SignOutButton redirectUrl="/login">
             <button
-              type="submit"
+              type="button"
               className="block w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
               Sign out
             </button>
-          </form>
+          </SignOutButton>
         </div>
       ) : null}
     </div>

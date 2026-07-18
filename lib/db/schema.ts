@@ -33,7 +33,7 @@ export type LinkEntry = { label: string; url: string };
 export const profiles = pgTable(
   "profiles",
   {
-    userId: uuid("user_id").primaryKey(),
+    userId: text("user_id").primaryKey(),
     username: text("username").notNull(),
     displayName: text("display_name").notNull(),
     bio: text("bio"),
@@ -67,7 +67,7 @@ export const usernameReservations = pgTable(
   {
     username: text("username").primaryKey(),
     reservedUntil: timestamp("reserved_until", { withTimezone: true }).notNull(),
-    reservedBy: uuid("reserved_by").references(() => profiles.userId, {
+    reservedBy: text("reserved_by").references(() => profiles.userId, {
       onDelete: "set null",
     }),
   },
@@ -89,7 +89,7 @@ export const events = pgTable(
     maxParticipants: integer("max_participants").notNull(),
     description: text("description"),
     createdBy: text("created_by").notNull(),
-    createdByUserId: uuid("created_by_user_id")
+    createdByUserId: text("created_by_user_id")
       .notNull()
       .references(() => profiles.userId, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -129,7 +129,7 @@ export const eventAttendees = pgTable(
     joinedAt: timestamp("joined_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    userId: uuid("user_id")
+    userId: text("user_id")
       .notNull()
       .references(() => profiles.userId, { onDelete: "cascade" }),
   },
@@ -165,7 +165,7 @@ export const reports = pgTable(
     targetType: text("target_type").notNull().$type<ReportTargetType>(),
     targetId: uuid("target_id").notNull(),
     reporterUsername: text("reporter_username").notNull(),
-    reporterUserId: uuid("reporter_user_id")
+    reporterUserId: text("reporter_user_id")
       .notNull()
       .references(() => profiles.userId, { onDelete: "cascade" }),
     reason: text("reason").notNull(),
