@@ -84,7 +84,7 @@ export async function signUpWithEmail(
     },
   );
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: email.data,
     password: password.data,
     options: {
@@ -93,6 +93,10 @@ export async function signUpWithEmail(
   });
 
   if (error) return { ok: false, error: error.message };
+
+  if (data.session) {
+    redirect("/claim-username");
+  }
 
   return { ok: true, message: "Check your email for a confirmation link." };
 }
