@@ -1,43 +1,20 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createServerClient } from "@supabase/ssr";
+import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { eq } from "drizzle-orm";
 import { env } from "@/lib/env";
 import { db } from "@/lib/db";
 import { profiles, type Profile } from "@/lib/db/schema";
 
-export async function createServerSupabase() {
-  const store = await cookies();
-  return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    cookies: {
-      getAll() {
-        return store.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => store.set(name, value, options));
-        } catch {
-          // cookies().set is read-only in Server Components; safe to ignore.
-          // Session refresh is handled by the proxy on the next request.
-        }
-      },
-    },
-  });
-}
-
-export const getServerSupabase = cache(createServerSupabase);
-
 export type SessionUser = { id: string; email: string | null };
 
 export const getServerSession = cache(async (): Promise<SessionUser | null> => {
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  return { id: user.id, email: user.email ?? null };
+  const { userId, sessionClaims } = await auth();
+  if (!userId) return null;
+  const email =
+    typeof sessionClaims?.email === "string" ? sessionClaims.email : null;
+  return { id: userId, email };
 });
 
 export const getServerProfile = cache(async (): Promise<Profile | null> => {
@@ -61,9 +38,17 @@ export async function requireProfile(): Promise<Profile> {
   const session = await requireUser();
   const profile = await getServerProfile();
   if (!profile) redirect("/claim-username");
-  // Reuse the looked-up profile but keep type aligned with the session id.
   if (profile.userId !== session.id) redirect("/claim-username");
   return profile;
+}
+
+export async function requireAdmin(): Promise<SessionUser> {
+  const session = await requireUser();
+  const allowed = env.ADMIN_USER_IDS?.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean) ?? [];
+  if (!allowed.includes(session.id)) redirect("/events");
+  return session;
 }
 
 export function createServiceSupabase() {
