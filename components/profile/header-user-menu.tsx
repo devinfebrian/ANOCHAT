@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { SignOutButton } from "@clerk/nextjs";
 
 type HeaderUserMenuProps = {
   profile: { username: string; displayName: string; avatarUrl: string | null } | null;
@@ -69,14 +68,14 @@ export function HeaderUserMenu({ profile }: HeaderUserMenuProps) {
           >
             Settings
           </Link>
-          <SignOutButton redirectUrl="/login">
+          <form action="/auth/signout" method="POST">
             <button
-              type="button"
+              type="submit"
               className="block w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
               Sign out
             </button>
-          </SignOutButton>
+          </form>
         </div>
       ) : null}
     </div>
