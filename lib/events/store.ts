@@ -11,9 +11,10 @@ import {
   type NewEventAttendee,
   type NewReport,
   type RsvpStatus,
+  type ReportTargetType,
 } from "@/lib/db/schema";
 
-export type EventPublic = Omit<Event, "managementTokenHash" | "creatorDeviceHash"> & {
+export type EventPublic = Omit<Event, "createdByUserId"> & {
   attendeesCount: number;
 };
 
@@ -24,7 +25,7 @@ export type EventListPage = { items: EventPublic[]; nextCursor: EventCursor | nu
 
 export type RsvpCounts = { joining: number; interested: number; declined: number };
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const LIST_PAGE_SIZE = 20;
 
 type TransactionClient = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -35,24 +36,31 @@ export interface EventStore {
   findEventForManagement(identifier: string): Promise<EventForManagement | null>;
   listUpcomingEvents(cursor?: EventCursor, now?: Date): Promise<EventListPage>;
   listPastEvents(cursor?: EventCursor, now?: Date): Promise<EventListPage>;
+  listEventsCreatedByUser(userId: string): Promise<EventPublic[]>;
   listEventAttendees(eventId: string): Promise<EventAttendee[]>;
   getRsvpCounts(eventId: string): Promise<RsvpCounts>;
-  getUserRsvp(eventId: string, username: string): Promise<{ status: RsvpStatus; note: string | null } | null>;
+  getUserRsvp(eventId: string, userId: string): Promise<{ status: RsvpStatus; note: string | null } | null>;
 
   insertEvent(event: NewEvent): Promise<{ id: string; slug: string }>;
-  updateEvent(id: string, data: Partial<Omit<NewEvent, "id" | "createdAt" | "createdBy">>): Promise<{ id: string } | null>;
+  updateEvent(id: string, data: Partial<Omit<NewEvent, "id" | "createdAt" | "createdBy" | "createdByUserId">>): Promise<{ id: string } | null>;
   cancelEvent(id: string): Promise<{ id: string } | null>;
 
-  findRsvpForUpdate(eventId: string, username: string): Promise<Pick<EventAttendee, "status" | "deviceHash"> | null>;
+  findRsvpForUpdate(eventId: string, userId: string): Promise<{ status: RsvpStatus } | null>;
   insertRsvp(attendee: NewEventAttendee): Promise<void>;
   updateRsvp(
     eventId: string,
-    username: string,
+    userId: string,
     data: Partial<EventAttendee> & { statusChanged: boolean },
   ): Promise<void>;
-  deleteRsvpByDevice(eventId: string, deviceHash: string): Promise<void>;
+  deleteRsvpByUser(eventId: string, userId: string): Promise<void>;
 
   insertReport(report: NewReport): Promise<void>;
+
+  countEventsCreatedByUserSince(userId: string, since: Date): Promise<number>;
+  countReportsByUserSince(userId: string, targetType: ReportTargetType, since: Date): Promise<number>;
+
+  updateEventsCreatedBy(oldUsername: string, newUsername: string): Promise<void>;
+  updateAttendeeUsernames(oldUsername: string, newUsername: string): Promise<void>;
 }
 
 export function parseCursor(raw: string | undefined): EventCursor | undefined {
@@ -92,9 +100,7 @@ const publicEventColumns = {
 
 const managementEventColumns = {
   ...publicEventColumns,
-  cancelledAt: events.cancelledAt,
-  managementTokenHash: events.managementTokenHash,
-  creatorDeviceHash: events.creatorDeviceHash,
+  createdByUserId: events.createdByUserId,
 };
 
 export function createDbEventStore(client: DbClient = db): EventStore {
@@ -165,6 +171,16 @@ export function createDbEventStore(client: DbClient = db): EventStore {
       return { items, nextCursor };
     },
 
+    async listEventsCreatedByUser(userId: string): Promise<EventPublic[]> {
+      await connection();
+      return client
+        .select(publicEventColumns)
+        .from(events)
+        .where(and(eq(events.createdByUserId, userId), isNull(events.cancelledAt)))
+        .orderBy(desc(events.startsAt))
+        .limit(50);
+    },
+
     async listEventAttendees(eventId: string): Promise<EventAttendee[]> {
       await connection();
       return client
@@ -192,13 +208,13 @@ export function createDbEventStore(client: DbClient = db): EventStore {
 
     async getUserRsvp(
       eventId: string,
-      username: string,
+      userId: string,
     ): Promise<{ status: RsvpStatus; note: string | null } | null> {
       await connection();
       const rows = await client
         .select({ status: eventAttendees.status, note: eventAttendees.note })
         .from(eventAttendees)
-        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.username, username)))
+        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.userId, userId)))
         .limit(1);
       return rows[0] ?? null;
     },
@@ -213,7 +229,7 @@ export function createDbEventStore(client: DbClient = db): EventStore {
 
     async updateEvent(
       id: string,
-      data: Partial<Omit<NewEvent, "id" | "createdAt" | "createdBy">>,
+      data: Partial<Omit<NewEvent, "id" | "createdAt" | "createdBy" | "createdByUserId">>,
     ): Promise<{ id: string } | null> {
       const rows = await client
         .update(events)
@@ -234,12 +250,12 @@ export function createDbEventStore(client: DbClient = db): EventStore {
 
     async findRsvpForUpdate(
       eventId: string,
-      username: string,
-    ): Promise<Pick<EventAttendee, "status" | "deviceHash"> | null> {
+      userId: string,
+    ): Promise<{ status: RsvpStatus } | null> {
       const rows = await client
-        .select({ status: eventAttendees.status, deviceHash: eventAttendees.deviceHash })
+        .select({ status: eventAttendees.status })
         .from(eventAttendees)
-        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.username, username)))
+        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.userId, userId)))
         .for("update")
         .limit(1);
       return rows[0] ?? null;
@@ -251,7 +267,7 @@ export function createDbEventStore(client: DbClient = db): EventStore {
 
     async updateRsvp(
       eventId: string,
-      username: string,
+      userId: string,
       data: Partial<EventAttendee> & { statusChanged: boolean },
     ): Promise<void> {
       const { statusChanged, ...rest } = data;
@@ -262,17 +278,51 @@ export function createDbEventStore(client: DbClient = db): EventStore {
       await client
         .update(eventAttendees)
         .set(update)
-        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.username, username)));
+        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.userId, userId)));
     },
 
-    async deleteRsvpByDevice(eventId: string, deviceHash: string): Promise<void> {
+    async deleteRsvpByUser(eventId: string, userId: string): Promise<void> {
       await client
         .delete(eventAttendees)
-        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.deviceHash, deviceHash)));
+        .where(and(eq(eventAttendees.eventId, eventId), eq(eventAttendees.userId, userId)));
     },
 
     async insertReport(report: NewReport): Promise<void> {
       await client.insert(reports).values(report);
+    },
+
+    async countEventsCreatedByUserSince(userId: string, since: Date): Promise<number> {
+      const rows = await client
+        .select({ count: sql<number>`count(*)::int` })
+        .from(events)
+        .where(and(eq(events.createdByUserId, userId), gt(events.createdAt, since)));
+      return rows[0]?.count ?? 0;
+    },
+
+    async countReportsByUserSince(
+      userId: string,
+      targetType: ReportTargetType,
+      since: Date,
+    ): Promise<number> {
+      const rows = await client
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reports)
+        .where(
+          and(
+            eq(reports.reporterUserId, userId),
+            eq(reports.targetType, targetType),
+            gt(reports.createdAt, since),
+          ),
+        );
+      return rows[0]?.count ?? 0;
+    },
+
+    async updateEventsCreatedBy(oldUsername: string, newUsername: string): Promise<void> {
+      await client.update(events).set({ createdBy: newUsername }).where(eq(events.createdBy, oldUsername));
+    },
+
+    async updateAttendeeUsernames(oldUsername: string, newUsername: string): Promise<void> {
+      await client.update(eventAttendees).set({ username: newUsername }).where(eq(eventAttendees.username, oldUsername));
     },
   };
 }

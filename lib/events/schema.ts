@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { ACTIVITY_TYPES, RSVP_STATUSES } from "@/lib/db/schema";
-import { usernameSchema } from "@/lib/profile/schema";
 
 const MIN_TITLE = 1;
 const MAX_TITLE = 120;
@@ -64,13 +63,12 @@ export const eventFormSchema = z.object({
     .max(MAX_DESCRIPTION, `Description must be at most ${MAX_DESCRIPTION} characters`)
     .optional()
     .or(z.literal("")),
-  createdBy: usernameSchema,
 });
 
 export type EventFormValues = z.infer<typeof eventFormSchema>;
 
-// Edit reuses every create field except createdBy (creator validated server-side).
-export const editEventSchema = eventFormSchema.omit({ createdBy: true });
+// Edit reuses create fields; creator is validated server-side.
+export const editEventSchema = eventFormSchema;
 export type EditEventValues = z.infer<typeof editEventSchema>;
 
 export const rsvpStatusSchema = z.enum(RSVP_STATUSES);

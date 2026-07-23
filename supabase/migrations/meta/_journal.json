@@ -5,15 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1782374452000,
-      "tag": "20260625044052_init_events",
+      "when": 1783404179692,
+      "tag": "0000_init_auth_profiles",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1782371431233,
-      "tag": "20260625044053_event_form",
+      "when": 1784304120006,
+      "tag": "0001_clerk-auth-ids",
       "breakpoints": true
     }
   ]

@@ -15,7 +15,7 @@ export type CreateEventState = {
 function mapError(error: IntakeError): CreateEventState {
   switch (error.type) {
     case "not_authenticated":
-      return { ok: false, formError: "Set a username before creating an event." };
+      return { ok: false, formError: "Pick a username before creating an event." };
     case "rate_limited":
       return { ok: false, formError: "Too many events created. Try again in a few minutes." };
     case "validation_error":
@@ -33,11 +33,11 @@ export async function createEvent(
 ): Promise<CreateEventState> {
   const ctx = await createEventIntakeContext();
   if (!ctx.user) {
-    return { ok: false, formError: "Set a username before creating an event." };
+    return { ok: false, formError: "Pick a username before creating an event." };
   }
 
   const raw = eventFormValuesFromFormData(formData);
-  const parsed = eventFormSchema.safeParse({ ...raw, createdBy: ctx.user });
+  const parsed = eventFormSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
   }
