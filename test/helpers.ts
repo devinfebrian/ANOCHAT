@@ -138,3 +138,9 @@ export async function getAttendeeUsername(username: string) {
   const rows = await db.select({ username: eventAttendees.username }).from(eventAttendees).where(eq(eventAttendees.username, username)).limit(1);
   return rows[0] ?? null;
 }
+
+// a helper function to get the report for a specific target and reporter
+export async function getReport(targetId: string, reporterUserId: string) {
+  const rows = await db.select().from("reports").where(eq("target_id", targetId)).and(eq("reporter_user_id", reporterUserId)).limit(1);
+  return rows[0] ?? null;
+}
